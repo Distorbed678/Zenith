@@ -1,0 +1,24 @@
+# Rust
+/target/
+**/*.rs.bk
+# Local-only reference material and game files (never commit; see CLAUDE.md)
+/reference/
+/decompiled/
+*.class
+*.jar
+*.mca
+# Parity oracle build output and dumps
+/tools/oracle/build/
+/tools/oracle/out/
+/parity-dumps/
+# Editors/OS
+.idea/
+.vscode/
+.DS_Store
+# Node / frontend workspace
+node_modules/
+.pnpm-store/
+web/.svelte-kit/
+web/build/
+.vite/
+*.tsbuildinfo

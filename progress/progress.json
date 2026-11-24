@@ -1,0 +1,1354 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-24T23:57:48Z",
+  "project": "Zenith",
+  "targetVersion": "26.3",
+  "protocol": 777,
+  "worldVersion": 5023,
+  "overall": {
+    "percent": 1.0,
+    "parityPercent": 0.0,
+    "milestonesDone": 0,
+    "milestonesTotal": 33,
+    "suitesPassing": 0,
+    "suitesTotal": 31
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "title": "Foundation",
+      "blurb": "Repo, rules, plan, hygiene guard, ownership proof, tracker, website.",
+      "percent": 70.0,
+      "weight": 2.0,
+      "milestones": [
+        "M0"
+      ]
+    },
+    {
+      "id": "P1",
+      "title": "Core data",
+      "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
+      "percent": 0.0,
+      "weight": 17.0,
+      "milestones": [
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5"
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "World simulation",
+      "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
+      "percent": 0.0,
+      "weight": 56.0,
+      "milestones": [
+        "M6",
+        "M7",
+        "M8",
+        "M9",
+        "M10",
+        "M11",
+        "M12",
+        "M13",
+        "M14",
+        "M15"
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Networking",
+      "blurb": "Protocol 777 end to end; the Zenith dedicated server accepts vanilla clients.",
+      "percent": 0.0,
+      "weight": 6.0,
+      "milestones": [
+        "M16"
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Client",
+      "blurb": "Vulkan renderer, resources, GUI, audio, singleplayer. Pixel-exact.",
+      "percent": 0.0,
+      "weight": 31.0,
+      "milestones": [
+        "M17",
+        "M18",
+        "M19",
+        "M20",
+        "M21",
+        "M22"
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Platform",
+      "blurb": "Microsoft sign-in, WASM mods, mod index, modpacks, launcher, in-game mod manager.",
+      "percent": 0.0,
+      "weight": 18.0,
+      "milestones": [
+        "M23",
+        "M24",
+        "M25",
+        "M26",
+        "M27"
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Speed & release",
+      "blurb": "Performance program and the 1.0 release for 26.3.",
+      "percent": 0.0,
+      "weight": 6.0,
+      "milestones": [
+        "M28",
+        "M29"
+      ]
+    },
+    {
+      "id": "P7",
+      "title": "More versions",
+      "blurb": "Next-release port via the version diff bot, older versions, research.",
+      "percent": 0.0,
+      "weight": 10.0,
+      "milestones": [
+        "M30",
+        "M31",
+        "R1"
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M0",
+      "phase": "P0",
+      "title": "Foundation & tooling",
+      "status": "in-progress",
+      "weight": 2.0,
+      "percent": 70.0,
+      "tasksDone": 7,
+      "tasksTotal": 10,
+      "tasks": [
+        {
+          "title": "Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)",
+          "done": true
+        },
+        {
+          "title": "Master plan written (docs/plan/00–13)",
+          "done": true
+        },
+        {
+          "title": "ADRs for the founding decisions",
+          "done": true
+        },
+        {
+          "title": "Cargo workspace + pinned toolchain",
+          "done": true
+        },
+        {
+          "title": "zenith-install: locate installs + local ownership proof",
+          "done": true
+        },
+        {
+          "title": "Asset/trademark/decompile guard (xtask + pre-commit + CI)",
+          "done": true
+        },
+        {
+          "title": "Tracker pipeline (milestones → progress.json → SVG)",
+          "done": true
+        },
+        {
+          "title": "Pixel-crafted design system (packages/ui)",
+          "done": false
+        },
+        {
+          "title": "Website v1 on GitHub Pages",
+          "done": false
+        },
+        {
+          "title": "Public GitHub repo + CI",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M1",
+      "phase": "P1",
+      "title": "Parity harness & data-gen ingestion",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 6,
+      "tasks": [
+        {
+          "title": "Java runtime discovery (launcher-bundled Java 25)",
+          "done": false
+        },
+        {
+          "title": "Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports",
+          "done": false
+        },
+        {
+          "title": "Compile reports into versioned binary tables (zenith-data)",
+          "done": false
+        },
+        {
+          "title": "Parity oracle Java agent skeleton (local-only, tools/oracle)",
+          "done": false
+        },
+        {
+          "title": "State-dump format + differ (zenith-parity)",
+          "done": false
+        },
+        {
+          "title": "Parity results → progress/parity/*.json → tracker",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "datagen-ingest",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "phase": "P1",
+      "title": "NBT & SNBT",
+      "status": "planned",
+      "weight": 2.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Binary NBT read/write (file + network variants)",
+          "done": false
+        },
+        {
+          "title": "Modified UTF-8 + depth/size limits identical to vanilla",
+          "done": false
+        },
+        {
+          "title": "SNBT parser + printer (vanilla formatting)",
+          "done": false
+        },
+        {
+          "title": "Fuzz targets (cargo-fuzz)",
+          "done": false
+        },
+        {
+          "title": "Round-trip every NBT blob in vanilla-generated worlds",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "nbt-roundtrip",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "snbt-format",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "phase": "P1",
+      "title": "Saves: region files & level data",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)",
+          "done": false
+        },
+        {
+          "title": "level.dat, playerdata, entities/ and poi/ region files",
+          "done": false
+        },
+        {
+          "title": "Session lock + atomic save semantics",
+          "done": false
+        },
+        {
+          "title": "io_uring backend on Linux (opt-in internal, same bytes)",
+          "done": false
+        },
+        {
+          "title": "Vanilla opens Zenith-saved worlds without fixups (oracle check)",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "anvil-io",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "phase": "P1",
+      "title": "Registries, identifiers & tags",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Identifier type + validation rules",
+          "done": false
+        },
+        {
+          "title": "Static + dynamic registries with vanilla numeric IDs",
+          "done": false
+        },
+        {
+          "title": "Block states & properties with identical global state IDs",
+          "done": false
+        },
+        {
+          "title": "Tag loading + resolution order",
+          "done": false
+        },
+        {
+          "title": "Feature flags",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "registry-ids",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "blockstate-ids",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M5",
+      "phase": "P1",
+      "title": "Codecs, data packs & text components",
+      "status": "planned",
+      "weight": 5.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Codec framework (decode/encode, lenient/strict, error messages)",
+          "done": false
+        },
+        {
+          "title": "Data pack discovery, overlays, pack.mcmeta version ranges",
+          "done": false
+        },
+        {
+          "title": "All vanilla data registries parse from the user's jar",
+          "done": false
+        },
+        {
+          "title": "Text components (JSON + NBT forms), styles, translation",
+          "done": false
+        },
+        {
+          "title": "Data components (item component system)",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "datapack-load",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "text-component",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M6",
+      "phase": "P2",
+      "title": "Math, RNG & noise primitives",
+      "status": "planned",
+      "weight": 2.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Java LCG Random + Xoroshiro128++ + positional factories",
+          "done": false
+        },
+        {
+          "title": "Java-exact float/double math helpers (sin table, floor, lerp…)",
+          "done": false
+        },
+        {
+          "title": "Improved/Perlin, Simplex, Blended and Normal noise",
+          "done": false
+        },
+        {
+          "title": "Seed hashing identical to vanilla",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "rng-streams",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "noise-samples",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M7",
+      "phase": "P2",
+      "title": "Terrain generation",
+      "status": "planned",
+      "weight": 8.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 6,
+      "tasks": [
+        {
+          "title": "Density functions + noise router",
+          "done": false
+        },
+        {
+          "title": "Multi-noise biome source + climate sampler",
+          "done": false
+        },
+        {
+          "title": "Aquifers, ore veins, noodle caves",
+          "done": false
+        },
+        {
+          "title": "Surface rules",
+          "done": false
+        },
+        {
+          "title": "Carvers",
+          "done": false
+        },
+        {
+          "title": "Golden diff: 10k chunks × 50 seeds, all dimensions",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "golden-terrain",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M8",
+      "phase": "P2",
+      "title": "Features & structures",
+      "status": "planned",
+      "weight": 7.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Configured/placed features + placement modifiers",
+          "done": false
+        },
+        {
+          "title": "Decoration step ordering",
+          "done": false
+        },
+        {
+          "title": "Structure sets, placement, jigsaw assembly",
+          "done": false
+        },
+        {
+          "title": "Structure templates loaded from the user's jar",
+          "done": false
+        },
+        {
+          "title": "Golden diff incl. block entities & entities",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "golden-features",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "golden-structures",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M9",
+      "phase": "P2",
+      "title": "Lighting",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 3,
+      "tasks": [
+        {
+          "title": "Block + sky light propagation, identical queue order",
+          "done": false
+        },
+        {
+          "title": "Light during worldgen + updates",
+          "done": false
+        },
+        {
+          "title": "Deterministic parallel lighting (same result)",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "light-engine",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M10",
+      "phase": "P2",
+      "title": "Server tick, block updates, redstone & fluids",
+      "status": "planned",
+      "weight": 8.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 6,
+      "tasks": [
+        {
+          "title": "Chunk tickets, loading levels, chunk status pipeline",
+          "done": false
+        },
+        {
+          "title": "Scheduled ticks, block events, neighbor/shape update order",
+          "done": false
+        },
+        {
+          "title": "Random ticks, weather, time, game rules",
+          "done": false
+        },
+        {
+          "title": "Redstone components incl. quasi-connectivity & update order",
+          "done": false
+        },
+        {
+          "title": "Fluids (water/lava) spread + interactions",
+          "done": false
+        },
+        {
+          "title": "Block entities ticking",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "tick-oracle",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "redstone-contraptions",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M11",
+      "phase": "P2",
+      "title": "Entities: physics & core",
+      "status": "planned",
+      "weight": 6.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Movement, collisions, step-up, drag — Java float semantics",
+          "done": false
+        },
+        {
+          "title": "Entity sections + tracking",
+          "done": false
+        },
+        {
+          "title": "Damage, effects, attributes",
+          "done": false
+        },
+        {
+          "title": "Projectiles, items, XP orbs, vehicles",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "entity-physics",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M12",
+      "phase": "P2",
+      "title": "Mobs: AI, pathfinding & spawning",
+      "status": "planned",
+      "weight": 8.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Goal selector AI",
+          "done": false
+        },
+        {
+          "title": "Brain/memory/sensor AI",
+          "done": false
+        },
+        {
+          "title": "Pathfinding (node evaluators, path following)",
+          "done": false
+        },
+        {
+          "title": "Natural + structure spawning, mob caps",
+          "done": false
+        },
+        {
+          "title": "Villagers, trading, raids, variants",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "mob-ai-oracle",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "spawning",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M13",
+      "phase": "P2",
+      "title": "Items, inventories, crafting & menus",
+      "status": "planned",
+      "weight": 6.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Item stacks + data components behavior",
+          "done": false
+        },
+        {
+          "title": "Containers & menus (click/drag semantics, incl. quirks)",
+          "done": false
+        },
+        {
+          "title": "Recipes: crafting, smelting, smithing, stonecutting, brewing",
+          "done": false
+        },
+        {
+          "title": "Enchanting + anvils + grindstones",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "menus",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "recipes",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M14",
+      "phase": "P2",
+      "title": "Commands, functions & chat",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Brigadier-compatible command graph (identical tree + suggestions)",
+          "done": false
+        },
+        {
+          "title": "All vanilla commands + selectors + argument types",
+          "done": false
+        },
+        {
+          "title": "mcfunction execution model + macros",
+          "done": false
+        },
+        {
+          "title": "Chat, chat types, signing (when signed in)",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "command-tree",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "functions",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M15",
+      "phase": "P2",
+      "title": "Progression & rules systems",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Loot tables + predicates + item modifiers",
+          "done": false
+        },
+        {
+          "title": "Advancements + criteria triggers",
+          "done": false
+        },
+        {
+          "title": "Statistics, scoreboard, teams, boss bars",
+          "done": false
+        },
+        {
+          "title": "Recipe book state",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "loot",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "advancements",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M16",
+      "phase": "P3",
+      "title": "Protocol 777 & dedicated server",
+      "status": "planned",
+      "weight": 6.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 6,
+      "tasks": [
+        {
+          "title": "Handshake/status/login/configuration/play states",
+          "done": false
+        },
+        {
+          "title": "Every packet codec, byte-identical",
+          "done": false
+        },
+        {
+          "title": "Compression + encryption",
+          "done": false
+        },
+        {
+          "title": "Registry sync + chunk serialization",
+          "done": false
+        },
+        {
+          "title": "zenith-server binary accepts a vanilla 26.3 client",
+          "done": false
+        },
+        {
+          "title": "Packet record/replay corpus",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "packet-codec",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        },
+        {
+          "id": "packet-replay",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M17",
+      "phase": "P4",
+      "title": "Client platform: window, input, Vulkan 1.3",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "SDL3 window + input (keyboard/mouse/gamepad/IME)",
+          "done": false
+        },
+        {
+          "title": "ash Vulkan 1.3 device, swapchain, frame graph",
+          "done": false
+        },
+        {
+          "title": "Shader pipeline: vanilla GLSL → SPIR-V via shaderc",
+          "done": false
+        },
+        {
+          "title": "Tracy GPU/CPU zones",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M18",
+      "phase": "P4",
+      "title": "Resources: packs, models, atlases, fonts",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Resource pack stack incl. overlays",
+          "done": false
+        },
+        {
+          "title": "Blockstates + models + atlases (identical stitching)",
+          "done": false
+        },
+        {
+          "title": "Fonts (bitmap/TTF/unihex) + lang from the user's assets",
+          "done": false
+        },
+        {
+          "title": "Core shader compatibility for resource-pack shaders",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "resource-load",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M19",
+      "phase": "P4",
+      "title": "World & entity rendering",
+      "status": "planned",
+      "weight": 10.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Chunk meshing: AO, smooth lighting, culling identical",
+          "done": false
+        },
+        {
+          "title": "Sky, clouds, weather, fog, dimension effects",
+          "done": false
+        },
+        {
+          "title": "Entity models + renderers + block entities",
+          "done": false
+        },
+        {
+          "title": "Particles + post effects",
+          "done": false
+        },
+        {
+          "title": "GPU-driven pipeline with pixel-exact output",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "screenshot-diff",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M20",
+      "phase": "P4",
+      "title": "GUI, HUD & text",
+      "status": "planned",
+      "weight": 5.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 3,
+      "tasks": [
+        {
+          "title": "Widget system + every vanilla screen",
+          "done": false
+        },
+        {
+          "title": "HUD, chat, tooltips, toasts",
+          "done": false
+        },
+        {
+          "title": "Text rendering identical (shadows, bidi, obfuscated)",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "screenshot-diff-gui",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M21",
+      "phase": "P4",
+      "title": "Audio",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 2,
+      "tasks": [
+        {
+          "title": "3D audio engine matching vanilla attenuation",
+          "done": false
+        },
+        {
+          "title": "Sound events, music manager, subtitles",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M22",
+      "phase": "P4",
+      "title": "Client logic & singleplayer",
+      "status": "planned",
+      "weight": 5.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Integrated server + singleplayer flow",
+          "done": false
+        },
+        {
+          "title": "Client prediction/interpolation",
+          "done": false
+        },
+        {
+          "title": "options.txt compatibility",
+          "done": false
+        },
+        {
+          "title": "Deterministic input record/replay",
+          "done": false
+        }
+      ],
+      "suites": [
+        {
+          "id": "input-replay",
+          "passed": 0,
+          "total": 0,
+          "percent": 0.0,
+          "updatedAt": null
+        }
+      ]
+    },
+    {
+      "id": "M23",
+      "phase": "P5",
+      "title": "Microsoft sign-in & online play",
+      "status": "planned",
+      "weight": 2.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "Owner registers Azure app + Mojang approval (blocked on owner)",
+          "done": false
+        },
+        {
+          "title": "Device-code OAuth → Xbox Live → XSTS → Minecraft services",
+          "done": false
+        },
+        {
+          "title": "Entitlement + profile check, keyring storage",
+          "done": false
+        },
+        {
+          "title": "Session join for online-mode servers",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M24",
+      "phase": "P5",
+      "title": "WASM mod runtime & SDK",
+      "status": "planned",
+      "weight": 6.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "wasmtime host + WIT world for the Zenith API",
+          "done": false
+        },
+        {
+          "title": "Capability permissions",
+          "done": false
+        },
+        {
+          "title": "zenith-sdk crate + `zenith mod new/build/run` CLI",
+          "done": false
+        },
+        {
+          "title": "Hot reload in dev instances",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M25",
+      "phase": "P5",
+      "title": "Mod index, signing & modpacks",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 4,
+      "tasks": [
+        {
+          "title": "GitHub-based signed mod index",
+          "done": false
+        },
+        {
+          "title": "PubGrub resolver + lockfiles",
+          "done": false
+        },
+        {
+          "title": ".zpack format + .mrpack import",
+          "done": false
+        },
+        {
+          "title": "Server→client mod sync",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M26",
+      "phase": "P5",
+      "title": "Launcher",
+      "status": "planned",
+      "weight": 5.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 5,
+      "tasks": [
+        {
+          "title": "Tauri 2 shell on packages/ui",
+          "done": false
+        },
+        {
+          "title": "Instances + imports (Prism/MultiMC/official/Modrinth/CF)",
+          "done": false
+        },
+        {
+          "title": "Mod + modpack management",
+          "done": false
+        },
+        {
+          "title": "Snapshots, crash safe-mode, 3D skin viewer",
+          "done": false
+        },
+        {
+          "title": "Signed auto-updates, localization, controller UI",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M27",
+      "phase": "P5",
+      "title": "In-game mod manager",
+      "status": "planned",
+      "weight": 2.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 2,
+      "tasks": [
+        {
+          "title": "Vanilla-style screens for browse/install/toggle/update",
+          "done": false
+        },
+        {
+          "title": "Permissions prompt + restart flow",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M28",
+      "phase": "P6",
+      "title": "Performance program",
+      "status": "planned",
+      "weight": 4.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 3,
+      "tasks": [
+        {
+          "title": "PGO + LTO + BOLT; x86-64-v3/v4 runtime dispatch",
+          "done": false
+        },
+        {
+          "title": "Perf CI dashboard (FPS, MSPT, chunk gen/s)",
+          "done": false
+        },
+        {
+          "title": "Deterministic parallel chunk pipeline",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M29",
+      "phase": "P6",
+      "title": "1.0 for 26.3",
+      "status": "planned",
+      "weight": 2.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 3,
+      "tasks": [
+        {
+          "title": "Packages: AppImage, Flatpak, AUR, MSI, DMG, ARM64",
+          "done": false
+        },
+        {
+          "title": "Reproducible builds + signed releases + nightly",
+          "done": false
+        },
+        {
+          "title": "Every parity suite at 100%",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M30",
+      "phase": "P7",
+      "title": "Next release port (26.4)",
+      "status": "planned",
+      "weight": 3.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 2,
+      "tasks": [
+        {
+          "title": "Version diff bot opens issues for 26.3 → 26.4",
+          "done": false
+        },
+        {
+          "title": "Version layer handles both versions side by side",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "M31",
+      "phase": "P7",
+      "title": "Older versions + data fixers",
+      "status": "planned",
+      "weight": 6.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 2,
+      "tasks": [
+        {
+          "title": "World upgrade data fixers",
+          "done": false
+        },
+        {
+          "title": "First older target chosen by owner",
+          "done": false
+        }
+      ],
+      "suites": []
+    },
+    {
+      "id": "R1",
+      "phase": "P7",
+      "title": "Research: JVM bridge for Java mods",
+      "status": "planned",
+      "weight": 1.0,
+      "percent": 0.0,
+      "tasksDone": 0,
+      "tasksTotal": 1,
+      "tasks": [
+        {
+          "title": "Feasibility study + prototype",
+          "done": false
+        }
+      ],
+      "suites": []
+    }
+  ],
+  "history": [
+    {
+      "date": "2026-11-24",
+      "percent": 1.0,
+      "parityPercent": 0.0
+    }
+  ]
+}

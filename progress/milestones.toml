@@ -1,0 +1,522 @@
+# Zenith progress source of truth.
+# `cargo xtask progress` merges this file with parity results in progress/parity/*.json and writes:
+#   progress/progress.json          (consumed by the website dashboard)
+#   progress/history.json           (overall % over time)
+#   docs/assets/tracker/*.svg       (visual tracker embedded in README.md)
+#
+# Milestone percent:
+#   - no suites:   done_tasks / total_tasks
+#   - with suites: mean(task completion, suite pass ratio)
+#   A milestone can only be "done" once every linked suite is at 100%.
+# Overall percent = weighted mean of milestone percents. Weights are relative effort estimates.
+# status: planned | in-progress | done
+
+[meta]
+project = "Zenith"
+target_version = "26.3"
+protocol = 777
+world_version = 5023
+
+[[phase]]
+id = "P0"
+title = "Foundation"
+blurb = "Repo, rules, plan, hygiene guard, ownership proof, tracker, website."
+
+[[phase]]
+id = "P1"
+title = "Core data"
+blurb = "Parity harness, NBT, saves, registries, codecs, data packs. All headless."
+
+[[phase]]
+id = "P2"
+title = "World simulation"
+blurb = "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server."
+
+[[phase]]
+id = "P3"
+title = "Networking"
+blurb = "Protocol 777 end to end; the Zenith dedicated server accepts vanilla clients."
+
+[[phase]]
+id = "P4"
+title = "Client"
+blurb = "Vulkan renderer, resources, GUI, audio, singleplayer. Pixel-exact."
+
+[[phase]]
+id = "P5"
+title = "Platform"
+blurb = "Microsoft sign-in, WASM mods, mod index, modpacks, launcher, in-game mod manager."
+
+[[phase]]
+id = "P6"
+title = "Speed & release"
+blurb = "Performance program and the 1.0 release for 26.3."
+
+[[phase]]
+id = "P7"
+title = "More versions"
+blurb = "Next-release port via the version diff bot, older versions, research."
+
+# ───────────────────────────── P0 ─────────────────────────────
+[[milestone]]
+id = "M0"
+phase = "P0"
+title = "Foundation & tooling"
+weight = 2
+status = "in-progress"
+tasks = [
+  { t = "Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)", done = true },
+  { t = "Master plan written (docs/plan/00–13)", done = true },
+  { t = "ADRs for the founding decisions", done = true },
+  { t = "Cargo workspace + pinned toolchain", done = true },
+  { t = "zenith-install: locate installs + local ownership proof", done = true },
+  { t = "Asset/trademark/decompile guard (xtask + pre-commit + CI)", done = true },
+  { t = "Tracker pipeline (milestones → progress.json → SVG)", done = true },
+  { t = "Pixel-crafted design system (packages/ui)", done = false },
+  { t = "Website v1 on GitHub Pages", done = false },
+  { t = "Public GitHub repo + CI", done = false },
+]
+
+# ───────────────────────────── P1 ─────────────────────────────
+[[milestone]]
+id = "M1"
+phase = "P1"
+title = "Parity harness & data-gen ingestion"
+weight = 4
+status = "planned"
+suites = ["datagen-ingest"]
+tasks = [
+  { t = "Java runtime discovery (launcher-bundled Java 25)", done = false },
+  { t = "Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports", done = false },
+  { t = "Compile reports into versioned binary tables (zenith-data)", done = false },
+  { t = "Parity oracle Java agent skeleton (local-only, tools/oracle)", done = false },
+  { t = "State-dump format + differ (zenith-parity)", done = false },
+  { t = "Parity results → progress/parity/*.json → tracker", done = false },
+]
+
+[[milestone]]
+id = "M2"
+phase = "P1"
+title = "NBT & SNBT"
+weight = 2
+status = "planned"
+suites = ["nbt-roundtrip", "snbt-format"]
+tasks = [
+  { t = "Binary NBT read/write (file + network variants)", done = false },
+  { t = "Modified UTF-8 + depth/size limits identical to vanilla", done = false },
+  { t = "SNBT parser + printer (vanilla formatting)", done = false },
+  { t = "Fuzz targets (cargo-fuzz)", done = false },
+  { t = "Round-trip every NBT blob in vanilla-generated worlds", done = false },
+]
+
+[[milestone]]
+id = "M3"
+phase = "P1"
+title = "Saves: region files & level data"
+weight = 3
+status = "planned"
+suites = ["anvil-io"]
+tasks = [
+  { t = "Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)", done = false },
+  { t = "level.dat, playerdata, entities/ and poi/ region files", done = false },
+  { t = "Session lock + atomic save semantics", done = false },
+  { t = "io_uring backend on Linux (opt-in internal, same bytes)", done = false },
+  { t = "Vanilla opens Zenith-saved worlds without fixups (oracle check)", done = false },
+]
+
+[[milestone]]
+id = "M4"
+phase = "P1"
+title = "Registries, identifiers & tags"
+weight = 3
+status = "planned"
+suites = ["registry-ids", "blockstate-ids"]
+tasks = [
+  { t = "Identifier type + validation rules", done = false },
+  { t = "Static + dynamic registries with vanilla numeric IDs", done = false },
+  { t = "Block states & properties with identical global state IDs", done = false },
+  { t = "Tag loading + resolution order", done = false },
+  { t = "Feature flags", done = false },
+]
+
+[[milestone]]
+id = "M5"
+phase = "P1"
+title = "Codecs, data packs & text components"
+weight = 5
+status = "planned"
+suites = ["datapack-load", "text-component"]
+tasks = [
+  { t = "Codec framework (decode/encode, lenient/strict, error messages)", done = false },
+  { t = "Data pack discovery, overlays, pack.mcmeta version ranges", done = false },
+  { t = "All vanilla data registries parse from the user's jar", done = false },
+  { t = "Text components (JSON + NBT forms), styles, translation", done = false },
+  { t = "Data components (item component system)", done = false },
+]
+
+# ───────────────────────────── P2 ─────────────────────────────
+[[milestone]]
+id = "M6"
+phase = "P2"
+title = "Math, RNG & noise primitives"
+weight = 2
+status = "planned"
+suites = ["rng-streams", "noise-samples"]
+tasks = [
+  { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = false },
+  { t = "Java-exact float/double math helpers (sin table, floor, lerp…)", done = false },
+  { t = "Improved/Perlin, Simplex, Blended and Normal noise", done = false },
+  { t = "Seed hashing identical to vanilla", done = false },
+]
+
+[[milestone]]
+id = "M7"
+phase = "P2"
+title = "Terrain generation"
+weight = 8
+status = "planned"
+suites = ["golden-terrain"]
+tasks = [
+  { t = "Density functions + noise router", done = false },
+  { t = "Multi-noise biome source + climate sampler", done = false },
+  { t = "Aquifers, ore veins, noodle caves", done = false },
+  { t = "Surface rules", done = false },
+  { t = "Carvers", done = false },
+  { t = "Golden diff: 10k chunks × 50 seeds, all dimensions", done = false },
+]
+
+[[milestone]]
+id = "M8"
+phase = "P2"
+title = "Features & structures"
+weight = 7
+status = "planned"
+suites = ["golden-features", "golden-structures"]
+tasks = [
+  { t = "Configured/placed features + placement modifiers", done = false },
+  { t = "Decoration step ordering", done = false },
+  { t = "Structure sets, placement, jigsaw assembly", done = false },
+  { t = "Structure templates loaded from the user's jar", done = false },
+  { t = "Golden diff incl. block entities & entities", done = false },
+]
+
+[[milestone]]
+id = "M9"
+phase = "P2"
+title = "Lighting"
+weight = 3
+status = "planned"
+suites = ["light-engine"]
+tasks = [
+  { t = "Block + sky light propagation, identical queue order", done = false },
+  { t = "Light during worldgen + updates", done = false },
+  { t = "Deterministic parallel lighting (same result)", done = false },
+]
+
+[[milestone]]
+id = "M10"
+phase = "P2"
+title = "Server tick, block updates, redstone & fluids"
+weight = 8
+status = "planned"
+suites = ["tick-oracle", "redstone-contraptions"]
+tasks = [
+  { t = "Chunk tickets, loading levels, chunk status pipeline", done = false },
+  { t = "Scheduled ticks, block events, neighbor/shape update order", done = false },
+  { t = "Random ticks, weather, time, game rules", done = false },
+  { t = "Redstone components incl. quasi-connectivity & update order", done = false },
+  { t = "Fluids (water/lava) spread + interactions", done = false },
+  { t = "Block entities ticking", done = false },
+]
+
+[[milestone]]
+id = "M11"
+phase = "P2"
+title = "Entities: physics & core"
+weight = 6
+status = "planned"
+suites = ["entity-physics"]
+tasks = [
+  { t = "Movement, collisions, step-up, drag — Java float semantics", done = false },
+  { t = "Entity sections + tracking", done = false },
+  { t = "Damage, effects, attributes", done = false },
+  { t = "Projectiles, items, XP orbs, vehicles", done = false },
+]
+
+[[milestone]]
+id = "M12"
+phase = "P2"
+title = "Mobs: AI, pathfinding & spawning"
+weight = 8
+status = "planned"
+suites = ["mob-ai-oracle", "spawning"]
+tasks = [
+  { t = "Goal selector AI", done = false },
+  { t = "Brain/memory/sensor AI", done = false },
+  { t = "Pathfinding (node evaluators, path following)", done = false },
+  { t = "Natural + structure spawning, mob caps", done = false },
+  { t = "Villagers, trading, raids, variants", done = false },
+]
+
+[[milestone]]
+id = "M13"
+phase = "P2"
+title = "Items, inventories, crafting & menus"
+weight = 6
+status = "planned"
+suites = ["menus", "recipes"]
+tasks = [
+  { t = "Item stacks + data components behavior", done = false },
+  { t = "Containers & menus (click/drag semantics, incl. quirks)", done = false },
+  { t = "Recipes: crafting, smelting, smithing, stonecutting, brewing", done = false },
+  { t = "Enchanting + anvils + grindstones", done = false },
+]
+
+[[milestone]]
+id = "M14"
+phase = "P2"
+title = "Commands, functions & chat"
+weight = 4
+status = "planned"
+suites = ["command-tree", "functions"]
+tasks = [
+  { t = "Brigadier-compatible command graph (identical tree + suggestions)", done = false },
+  { t = "All vanilla commands + selectors + argument types", done = false },
+  { t = "mcfunction execution model + macros", done = false },
+  { t = "Chat, chat types, signing (when signed in)", done = false },
+]
+
+[[milestone]]
+id = "M15"
+phase = "P2"
+title = "Progression & rules systems"
+weight = 4
+status = "planned"
+suites = ["loot", "advancements"]
+tasks = [
+  { t = "Loot tables + predicates + item modifiers", done = false },
+  { t = "Advancements + criteria triggers", done = false },
+  { t = "Statistics, scoreboard, teams, boss bars", done = false },
+  { t = "Recipe book state", done = false },
+]
+
+# ───────────────────────────── P3 ─────────────────────────────
+[[milestone]]
+id = "M16"
+phase = "P3"
+title = "Protocol 777 & dedicated server"
+weight = 6
+status = "planned"
+suites = ["packet-codec", "packet-replay"]
+tasks = [
+  { t = "Handshake/status/login/configuration/play states", done = false },
+  { t = "Every packet codec, byte-identical", done = false },
+  { t = "Compression + encryption", done = false },
+  { t = "Registry sync + chunk serialization", done = false },
+  { t = "zenith-server binary accepts a vanilla 26.3 client", done = false },
+  { t = "Packet record/replay corpus", done = false },
+]
+
+# ───────────────────────────── P4 ─────────────────────────────
+[[milestone]]
+id = "M17"
+phase = "P4"
+title = "Client platform: window, input, Vulkan 1.3"
+weight = 4
+status = "planned"
+tasks = [
+  { t = "SDL3 window + input (keyboard/mouse/gamepad/IME)", done = false },
+  { t = "ash Vulkan 1.3 device, swapchain, frame graph", done = false },
+  { t = "Shader pipeline: vanilla GLSL → SPIR-V via shaderc", done = false },
+  { t = "Tracy GPU/CPU zones", done = false },
+]
+
+[[milestone]]
+id = "M18"
+phase = "P4"
+title = "Resources: packs, models, atlases, fonts"
+weight = 4
+status = "planned"
+suites = ["resource-load"]
+tasks = [
+  { t = "Resource pack stack incl. overlays", done = false },
+  { t = "Blockstates + models + atlases (identical stitching)", done = false },
+  { t = "Fonts (bitmap/TTF/unihex) + lang from the user's assets", done = false },
+  { t = "Core shader compatibility for resource-pack shaders", done = false },
+]
+
+[[milestone]]
+id = "M19"
+phase = "P4"
+title = "World & entity rendering"
+weight = 10
+status = "planned"
+suites = ["screenshot-diff"]
+tasks = [
+  { t = "Chunk meshing: AO, smooth lighting, culling identical", done = false },
+  { t = "Sky, clouds, weather, fog, dimension effects", done = false },
+  { t = "Entity models + renderers + block entities", done = false },
+  { t = "Particles + post effects", done = false },
+  { t = "GPU-driven pipeline with pixel-exact output", done = false },
+]
+
+[[milestone]]
+id = "M20"
+phase = "P4"
+title = "GUI, HUD & text"
+weight = 5
+status = "planned"
+suites = ["screenshot-diff-gui"]
+tasks = [
+  { t = "Widget system + every vanilla screen", done = false },
+  { t = "HUD, chat, tooltips, toasts", done = false },
+  { t = "Text rendering identical (shadows, bidi, obfuscated)", done = false },
+]
+
+[[milestone]]
+id = "M21"
+phase = "P4"
+title = "Audio"
+weight = 3
+status = "planned"
+tasks = [
+  { t = "3D audio engine matching vanilla attenuation", done = false },
+  { t = "Sound events, music manager, subtitles", done = false },
+]
+
+[[milestone]]
+id = "M22"
+phase = "P4"
+title = "Client logic & singleplayer"
+weight = 5
+status = "planned"
+suites = ["input-replay"]
+tasks = [
+  { t = "Integrated server + singleplayer flow", done = false },
+  { t = "Client prediction/interpolation", done = false },
+  { t = "options.txt compatibility", done = false },
+  { t = "Deterministic input record/replay", done = false },
+]
+
+# ───────────────────────────── P5 ─────────────────────────────
+[[milestone]]
+id = "M23"
+phase = "P5"
+title = "Microsoft sign-in & online play"
+weight = 2
+status = "planned"
+tasks = [
+  { t = "Owner registers Azure app + Mojang approval (blocked on owner)", done = false },
+  { t = "Device-code OAuth → Xbox Live → XSTS → Minecraft services", done = false },
+  { t = "Entitlement + profile check, keyring storage", done = false },
+  { t = "Session join for online-mode servers", done = false },
+]
+
+[[milestone]]
+id = "M24"
+phase = "P5"
+title = "WASM mod runtime & SDK"
+weight = 6
+status = "planned"
+tasks = [
+  { t = "wasmtime host + WIT world for the Zenith API", done = false },
+  { t = "Capability permissions", done = false },
+  { t = "zenith-sdk crate + `zenith mod new/build/run` CLI", done = false },
+  { t = "Hot reload in dev instances", done = false },
+]
+
+[[milestone]]
+id = "M25"
+phase = "P5"
+title = "Mod index, signing & modpacks"
+weight = 3
+status = "planned"
+tasks = [
+  { t = "GitHub-based signed mod index", done = false },
+  { t = "PubGrub resolver + lockfiles", done = false },
+  { t = ".zpack format + .mrpack import", done = false },
+  { t = "Server→client mod sync", done = false },
+]
+
+[[milestone]]
+id = "M26"
+phase = "P5"
+title = "Launcher"
+weight = 5
+status = "planned"
+tasks = [
+  { t = "Tauri 2 shell on packages/ui", done = false },
+  { t = "Instances + imports (Prism/MultiMC/official/Modrinth/CF)", done = false },
+  { t = "Mod + modpack management", done = false },
+  { t = "Snapshots, crash safe-mode, 3D skin viewer", done = false },
+  { t = "Signed auto-updates, localization, controller UI", done = false },
+]
+
+[[milestone]]
+id = "M27"
+phase = "P5"
+title = "In-game mod manager"
+weight = 2
+status = "planned"
+tasks = [
+  { t = "Vanilla-style screens for browse/install/toggle/update", done = false },
+  { t = "Permissions prompt + restart flow", done = false },
+]
+
+# ───────────────────────────── P6 ─────────────────────────────
+[[milestone]]
+id = "M28"
+phase = "P6"
+title = "Performance program"
+weight = 4
+status = "planned"
+tasks = [
+  { t = "PGO + LTO + BOLT; x86-64-v3/v4 runtime dispatch", done = false },
+  { t = "Perf CI dashboard (FPS, MSPT, chunk gen/s)", done = false },
+  { t = "Deterministic parallel chunk pipeline", done = false },
+]
+
+[[milestone]]
+id = "M29"
+phase = "P6"
+title = "1.0 for 26.3"
+weight = 2
+status = "planned"
+tasks = [
+  { t = "Packages: AppImage, Flatpak, AUR, MSI, DMG, ARM64", done = false },
+  { t = "Reproducible builds + signed releases + nightly", done = false },
+  { t = "Every parity suite at 100%", done = false },
+]
+
+# ───────────────────────────── P7 ─────────────────────────────
+[[milestone]]
+id = "M30"
+phase = "P7"
+title = "Next release port (26.4)"
+weight = 3
+status = "planned"
+tasks = [
+  { t = "Version diff bot opens issues for 26.3 → 26.4", done = false },
+  { t = "Version layer handles both versions side by side", done = false },
+]
+
+[[milestone]]
+id = "M31"
+phase = "P7"
+title = "Older versions + data fixers"
+weight = 6
+status = "planned"
+tasks = [
+  { t = "World upgrade data fixers", done = false },
+  { t = "First older target chosen by owner", done = false },
+]
+
+[[milestone]]
+id = "R1"
+phase = "P7"
+title = "Research: JVM bridge for Java mods"
+weight = 1
+status = "planned"
+tasks = [
+  { t = "Feasibility study + prototype", done = false },
+]

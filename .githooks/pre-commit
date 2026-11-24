@@ -1,0 +1,11 @@
+#!/bin/sh
+# Zenith pre-commit: keep the tracker current and keep game files / trademark misuse out of the repo.
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+if git diff --cached --name-only | grep -q '^progress/'; then
+  cargo xtask progress
+  git add progress docs/assets/tracker README.md
+fi
+# The hash rule needs a local launched install (or a cached blocklist). Without one, set
+# ZENITH_GUARD_FLAGS=--no-hashes and CI will run the full check.
+cargo xtask guard --staged ${ZENITH_GUARD_FLAGS:-}

@@ -1,0 +1,12 @@
+# Facts about official releases, used only when Mojang's manifest can't be reached and nothing is cached.
+# Values are SHA-1 hashes and IDs published in Mojang's public version manifest (piston-meta). No game content.
+# The online manifest is always preferred; the version diff bot (M30) appends new releases here.
+
+[[version]]
+id = "26.3"
+client_sha1 = "e877b6a07acd633fb3bb475002175cec036e7b87"
+asset_index_id = "34"
+asset_index_sha1 = "afea8bb2aeb664d53f219ae248248a264afa27c8"
+world_version = 5023
+protocol = 777
+java_major = 25
