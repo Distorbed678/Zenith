@@ -160,5 +160,6 @@ suite; all are listed for completeness.
 None.
 
 ## Parity status
-
-Not yet run.
+`block-facts` (2026-11-25): **535,845/535,845** checks identical — all 35,723 states × 15 field groups (identity,
+flags, numbers, sound, fluid, six shape kinds, position-dependent shapes, face sturdiness / fullness / occlusion).
+Context-dependent collision (held scaffolding, powder snow, standable fluids) and collision sweeps are not covered yet.

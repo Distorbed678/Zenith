@@ -437,7 +437,19 @@ Public names in the 26.3 client (for the oracle agent only; implementations must
    rotations, offsets at P1/P2, and the hopper spout are the only non-trivial values). Expected: no discrepancies.
 2. **[oracle] Hollow probe layer** (§4.2 last bullet): confirm no state's face occlusion shape is "non-empty with zero
    boxes" (`box_count = 0` while the dump wrote a shape) — expected none.
+3. **(implementer) Model used, and what the suite does not prove.** `zenith-blocks` stores a shape as its canonical
+   box list (§2.2 order) plus bounds, and rebuilds a grid over the union of both operands' coordinates for each join,
+   rotation and face cut. It does not model regular-vs-explicit coordinate lists, the cost-256 merger choice, the
+   ε-merge of two distinct coordinates (only exact duplicates and values within ε are folded), or the "hollow probe
+   layer" slice (reported as EMPTY). The `block-facts` suite is 100% (all 35,723 states), so questions 1 and 2 above do
+   not arise in 26.3 (no dumped shape needed any of those paths). New blocks or shape rules in a later version that hit
+   them must be re-verified.
+4. **(implementer) Only the empty context is covered.** The suite evaluates every shape with the empty getter and the
+   empty collision context (§5.3 table). The context-dependent behaviour (scaffolding with the item, powder snow for a
+   falling entity, liquid collision when standable, shulker-box and moving-piston block entities) is not implemented;
+   `zenith-blocks` reports the empty-context answers only. Entity movement will need the other contexts and a suite for them.
 
 ## Parity status
-
-Not yet run.
+`block-facts` (2026-11-25): **535,845/535,845** checks identical — all 35,723 states × 15 field groups (identity,
+flags, numbers, sound, fluid, six shape kinds, position-dependent shapes, face sturdiness / fullness / occlusion).
+Context-dependent collision (held scaffolding, powder snow, standable fluids) and collision sweeps are not covered yet.

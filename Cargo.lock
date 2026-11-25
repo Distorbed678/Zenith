@@ -1572,6 +1572,7 @@ dependencies = [
  "toml",
  "ureq",
  "zenith-biome",
+ "zenith-blocks",
  "zenith-codec",
  "zenith-components",
  "zenith-data",
@@ -1620,6 +1621,16 @@ version = "0.0.1"
 dependencies = [
  "thiserror",
  "zenith-codec",
+ "zenith-data",
+ "zenith-math",
+ "zenith-registry",
+]
+
+[[package]]
+name = "zenith-blocks"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
  "zenith-data",
  "zenith-math",
  "zenith-registry",

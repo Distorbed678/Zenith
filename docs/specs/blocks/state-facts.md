@@ -378,7 +378,17 @@ coloured terracotta blocks use the terracotta colour.
    five, so the implementer knows exactly which facts must wait for tag loading.
 2. **[oracle] Map-colour ids.** The id/rgb table above was read from the colour definitions; confirm with ZBF1
    `map_color_id` / `map_color_rgb` for one block per colour (e.g. stone 11 / 0x707070, glow lichen 61 / 0x7FA796).
+3. **(implementer) Class lists proven only where they change a dumped bit.** The class lists of §2 (vegetation for
+   skylight and pathfinding, signal source, analog output, block entity, all-false pathfinding) are keyed by the class
+   names of `block-table.md`. The suite is 100%, but a list entry that does not change any dumped bit is unproven: for
+   example, removing `FlowerBlock` from the vegetation list changes no bit, because flowers get the same skylight answer
+   from the default rule. The vegetation membership should be re-confirmed against the class hierarchy by the reader.
+4. **(implementer) `pathfindable WATER` uses fluid ids, not a loaded fluid tag.** `zenith-blocks` treats the fluid as
+   "in `#minecraft:water`" when it is `water` or `flowing_water` (and "in `#minecraft:lava`" for `lava` /
+   `flowing_lava`); only the five block tags of §2 open question 1 are read from the install, as block tags. A data pack
+   that changed the fluid tags would not be seen. Equivalent in the unmodified game.
 
 ## Parity status
-
-Not yet run.
+`block-facts` (2026-11-25): **535,845/535,845** checks identical — all 35,723 states × 15 field groups (identity,
+flags, numbers, sound, fluid, six shape kinds, position-dependent shapes, face sturdiness / fullness / occlusion).
+Context-dependent collision (held scaffolding, powder snow, standable fluids) and collision sweeps are not covered yet.

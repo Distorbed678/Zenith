@@ -195,9 +195,10 @@ id = "M8"
 phase = "P2"
 title = "Features & structures"
 weight = 7
-status = "planned"
-suites = ["golden-features", "golden-structures"]
+status = "in-progress"
+suites = ["block-facts", "golden-features", "golden-structures"]
 tasks = [
+  { t = "Block shapes + per-state static facts (ADR 0009)", done = true },
   { t = "Configured/placed features + placement modifiers", done = false },
   { t = "Decoration step ordering", done = false },
   { t = "Structure sets, placement, jigsaw assembly", done = false },

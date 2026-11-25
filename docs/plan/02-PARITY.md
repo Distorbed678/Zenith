@@ -73,6 +73,7 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 | `worldgen-router` | M7 | Every noise-router field and aquifer-config function at points (uncached path), final-density and climate chunk volumes (caching path), raw `f32` bits (`TerrainProbe`) | 7 noise settings × 3 seeds × 134 points; 2 seeds × 3 chunks |
 | `worldgen-biomes` | M7 | Quantized climate target points; chosen biome per quart and zoomed biome per block for every built-in source and hand-made fixed / checkerboard / tied multi-noise sources; seed obfuscation (`TerrainProbe`) | 7 settings × 3 seeds × 317 quarts; 9 sources × 4 seeds × (317 quarts + 314 blocks) |
 | `worldgen-columns` | M7 | The 4 base heights and every block-state id of the base column (density + aquifer + default block/fluid, before surface and carvers) per (x, z) (`TerrainProbe` column mode) | 7 noise settings × 3 seeds × 61 columns |
+| `block-facts` | M8 | Every block state's static facts vs the game (`BlockFacts`): identity, 32 flags, numbers, sound, fluid state, six shape kinds (box lists in order + bounds), position-dependent shapes, face sturdiness / fullness / occlusion | All 35,723 states × 15 field groups |
 | `golden-terrain` | M7 | Blocks, biomes, heightmaps per chunk | 10k chunks × 50 seeds × 3 dimensions |
 | `golden-features` | M8 | Feature placement incl. block entities | Same corpus |
 | `golden-structures` | M8 | Structure starts/pieces/contents | Same corpus + forced structure seeds |

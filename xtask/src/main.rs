@@ -3,6 +3,7 @@
 mod guard;
 mod oracle;
 mod parity;
+mod parity_blocks;
 mod parity_terrain;
 mod parity_text;
 mod progress;
@@ -121,6 +122,19 @@ enum ParityCmd {
         version: String,
         #[arg(long)]
         write: bool,
+    },
+    /// Every static fact and shape of every block state (35,723 in 26.3) vs the game's own (ADR 0009).
+    BlockFacts {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+        /// How many failing states to print.
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+        /// Only print failures whose state description contains this text (e.g. `minecraft:oak_stairs`).
+        #[arg(long)]
+        only: Option<String>,
     },
     /// Compare zenith-math's noise generators with vanilla's at fixed sample points.
     NoiseSamples {
@@ -245,6 +259,15 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::BlockstateIds { version, write },
         } => parity::blockstate_ids(&version, write),
+        Cmd::Parity {
+            cmd:
+                ParityCmd::BlockFacts {
+                    version,
+                    write,
+                    limit,
+                    only,
+                },
+        } => parity_blocks::block_facts(&version, write, limit, only.as_deref()),
         Cmd::Parity {
             cmd: ParityCmd::NoiseSamples { version, write },
         } => parity::noise_samples(&version, write),

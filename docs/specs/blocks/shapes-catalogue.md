@@ -510,9 +510,15 @@ All coordinates above; rotation names and the quarter convention in Summary.
 
 None for the shapes themselves; the global probes are in shapes.md "Open questions".
 
-## Parity status
+1. **(implementer)** The catalogue was implemented as written and every family matches the game for all 35,723 states
+   (`block-facts`, 15 field groups). The hopper spout is clipped to the block with an AND against the unit cube; the
+   result matches for all five facings. The dragon head's standing collision box is the only collision that differs
+   from its outline among the skulls; both are as listed.
 
-Not yet run.
+## Parity status
+`block-facts` (2026-11-25): **535,845/535,845** checks identical — all 35,723 states × 15 field groups (identity,
+flags, numbers, sound, fluid, six shape kinds, position-dependent shapes, face sturdiness / fullness / occlusion).
+Context-dependent collision (held scaffolding, powder snow, standable fluids) and collision sweeps are not covered yet.
 
 ## Family membership (generated from the registry; registry order)
 

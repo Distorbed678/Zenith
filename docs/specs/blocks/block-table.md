@@ -1334,6 +1334,12 @@ ZBF1 (`BlockFacts`) dumps every column for every state; compare row by row.
 
 None specific to the table; see state-facts.md.
 
-## Parity status
+1. **(implementer)** `zenith-blocks` embeds this table at build time and parses it (1,286 rows, 35,723 states); every
+   column is compared for every state by `block-facts` and matches. Keeping the table format stable (the pipe
+   layout, the `flags` tokens and the three per-state rules in the map colour, light and sound columns) is part of the
+   contract between this document and the crate.
 
-Not yet run.
+## Parity status
+`block-facts` (2026-11-25): **535,845/535,845** checks identical — all 35,723 states × 15 field groups (identity,
+flags, numbers, sound, fluid, six shape kinds, position-dependent shapes, face sturdiness / fullness / occlusion).
+Context-dependent collision (held scaffolding, powder snow, standable fluids) and collision sweeps are not covered yet.

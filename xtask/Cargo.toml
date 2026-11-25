@@ -28,6 +28,7 @@ zenith-storage = { path = "../crates/zenith-storage" }
 zenith-codec = { path = "../crates/zenith-codec" }
 zenith-components = { path = "../crates/zenith-components" }
 zenith-worldgen = { path = "../crates/zenith-worldgen" }
+zenith-blocks = { path = "../crates/zenith-blocks" }
 zenith-biome = { path = "../crates/zenith-biome" }
 flate2.workspace = true
 libz-sys.workspace = true
