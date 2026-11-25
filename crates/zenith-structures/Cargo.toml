@@ -1,0 +1,24 @@
+[package]
+name = "zenith-structures"
+description = "Clean-room 26.3 structure placement, jigsaw assembly, legacy piece generators, and structure templates."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+zenith-math = { path = "../zenith-math" }
+zenith-nbt = { path = "../zenith-nbt" }
+zenith-registry = { path = "../zenith-registry" }
+zenith-codec = { path = "../zenith-codec" }
+zenith-biome = { path = "../zenith-biome" }
+zenith-blocks = { path = "../zenith-blocks" }
+zenith-worldgen = { path = "../zenith-worldgen" }
+
+[lints]
+workspace = true

@@ -1639,9 +1639,14 @@ Public Java classes and methods a black-box parity harness for `golden-structure
 3. **[oracle] `NetherFossilPiece` multi-chunk `chunkBB.encapsulate` and `placeDriedGhast` behavior**: Unlike `RuinedPortalPiece`, `NetherFossilPiece.postProcess` has no `chunkBB.isInside(center)` guard before calling `chunkBB.encapsulate(fossilBB)` and `placeDriedGhast`. **Probe**: Pick a Nether Fossil spanning a chunk boundary and dump final chunk blocks (including `minecraft:dried_ghast` position and facing) across both chunks, verifying whether `WorldGenRegion`'s write radius permits the cross-chunk write cleanly and produces identical blocks when both chunks generate.
 4. **[oracle] `OceanMonumentPiece` per-chunk child-room RNG consumption in `OceanMonumentSimpleRoom` and `OceanMonumentSimpleTopRoom`**: `MonumentBuilding.postProcess` passes the chunk's `random` into each intersecting child room in `childPieces` order, where `SimpleRoom` draws `nextBoolean()` (when `mainDesign != 0`) and `SimpleTopRoom` draws wet-sponge RNGs per `(x, z)` regardless of `chunkBB`. **Probe**: Dump block states across all chunks intersecting an Ocean Monument (especially a `SimpleRoom` or `SimpleTopRoom` split across a chunk border) to confirm whether vanilla generates different sponge patterns / center pillars on opposite sides of a chunk border when `random` differs per chunk, and confirm Zenith replicates that exact per-chunk RNG stream.
 5. **[oracle] Block-shape predicate parity (`isFaceSturdy`, `canSupportCenter`, `isSolidRender`, `isFaceFull`) during structure placement**: `MineShaftCorridor` pillars/chains/rails/cobwebs, `NetherFossilStructure` floor detection, `StructurePiece.reorient` chest facing, and `RuinedPortalPiece.maybeAddVines` depend on exact block collision/occlusion shape predicates. **Probe**: Across a `golden-structures` sample covering Mineshaft (normal + mesa), Stronghold, Nether Fortress, Nether Fossil, and Ruined Portal (jungle + swamp), verify zero mismatches on chain vs. pillar selection, cobweb placement, chest facing, and vine attachment.
+6. **(implementer) Spec notes verified by `structure-starts` parity (26.3, 828/828 across all 52 structures)**:
+   - `TemplateStructurePiece` subclasses (`iglu`, `shipwreck`, `orp`, `nefos`, `rupo`, `wmp`, `ecp`) all carry orientation `Direction.NORTH` (`"north"`), not `null` (whereas `btp` and `jigsaw` carry `null`).
+   - `NetherFortress` `StartPiece` extends `BridgeCrossing` and reports piece type ID `minecraft:nebcr` (not a distinct `minecraft:nestart` ID).
+   - `WoodlandMansion` §6.3 `traverseOuterWalls` outer corner: `data.position` is mutated by `-1 * SOUTH` *before* emitting `"wall_corner"`, and then shifted by `-7 * SOUTH - 6 * WEST` (net `-8 * SOUTH - 6 * WEST`).
 
 ---
 
 ## Parity status
-
-`golden-structures`: not yet run.
+Starts (piece lists, bounds, orientation, depth) of every non-jigsaw structure type: **identical** in
+`structure-starts` (part of 828/828, 2026-11-25), including mansions (6,539 pieces), strongholds (1,877), fortresses
+(1,040), mineshafts and end cities. Per-chunk block placement of the pieces is not verified yet (`golden-structures`).

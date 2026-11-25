@@ -2248,6 +2248,16 @@ Public reference entry points suitable for black-box oracle testing (`golden-fea
 4. **Java `HashSet<BlockPos>` iteration order in `VegetationPatchFeature`, `WaterloggedVegetationPatchFeature`, and `FallenTreeFeature`** (`[oracle]` in §4.24, §4.55, §4.56):
    - *Question*: Exact parity of `distributeVegetation` (and `FallenTreeFeature`'s `log_decorators` when multiple log blocks exist) depends on iterating `HashSet<BlockPos>` in Java 21's `HashMap` bucket order (`h = key.hashCode(); hash = h ^ (h >>> 16); bucket = hash & (cap - 1)`, initial capacity 16, load factor 0.75, doubling on `size > threshold`, chaining in insertion order within a bucket unless treeified at bin length >= 8 & capacity >= 64).
    - *Black-box probe*: Run `VegetationPatchFeature.place` and `WaterloggedVegetationPatchFeature.place` on a lush-cave test chunk (fixed seed + fixed origin) and verify every placed clay/moss/azalea/dripleaf block matches Java bit-for-bit when Zenith replicates Java `HashSet<BlockPos>` iteration order.
+5. **(implementer) `zenith-worldgen::TerrainChunk` mutator API for `FEATURES` step**:
+   - *Context*: `TerrainChunk::set_block_and_update_heightmaps` only live-updates `OCEAN_FLOOR_WG` and `WORLD_SURFACE_WG` (which must remain frozen during `FEATURES`), and `TerrainChunk` has no public mutators for the 4 `FINAL` heightmaps, scheduled block/fluid ticks, block entities, or entities. `zenith-features` currently works around this by copying into `RegionChunk::from_terrain_chunk`. Adding `FINAL`-heightmap live-update and tick/BE mutators to `TerrainChunk` (or a shared mutable proto-chunk type) would eliminate the per-chunk copy.
+6. **(implementer) `ProtoChunk` heightmaps and post-processing marks during `FEATURES`**:
+   - *Observed in `golden-features` parity*: (a) `ProtoChunk.setBlockState` updates only the 4 `FINAL` heightmaps (`OCEAN_FLOOR`, `WORLD_SURFACE`, `MOTION_BLOCKING`, `MOTION_BLOCKING_NO_LEAVES`), leaving `OCEAN_FLOOR_WG` and `WORLD_SURFACE_WG` frozen at their `TERRAIN`-step values (verified on End `(72, 12)` chorus plant); (b) `ProtoChunk.markPosForPostProcessing` appends packed offsets without per-section deduplication (verified on Nether `(-307, -12)` and `(228, 240)`). Clarifying both explicitly in §1.1 would help future readers.
+   **Answered (reader, 2026-11-25):** both confirmed. A proto chunk's set-block updates the heightmaps listed for its
+   *persisted* status; while the features step runs, every chunk of the region is at `terrain`, whose list is the four
+   final heightmaps (`OCEAN_FLOOR`, `WORLD_SURFACE`, `MOTION_BLOCKING`, `MOTION_BLOCKING_NO_LEAVES`), so the two
+   `*_WG` heightmaps stay frozen; a listed heightmap the chunk does not have yet is created and primed on first use.
+   Post-processing marks are appended to a plain per-section list (created on first use), with no de-duplication.
+   Question 5 (an API change in `zenith-worldgen`) is a design note, not a spec question; the copy is fine for now.
 
 ---
 

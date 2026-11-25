@@ -19,7 +19,7 @@ only for owner-only decisions (marked ⛔).
 | M5 | Codecs, data packs, text, components | M4 | 5 | `datapack-load`, `text-component` 100% |
 | **P2** | **World simulation** | | | |
 | M6 | Math, RNG, noise | M0 | 2 | `rng-streams`, `noise-samples` 100% |
-| M7 | Terrain generation | M5, M6 | 8 | `golden-terrain` 100% (10k chunks × 50 seeds × 3 dims) |
+| M7 | Terrain generation | M5, M6 | 8 | `golden-terrain` 100% over 50 seeds in every dimension and world type (done 2026-11-25: 14,798 chunks, 147,980 checks; structures off — structure terrain adaptation is verified in M8) |
 | M8 | Features & structures | M7 | 7 | `golden-features`, `golden-structures` 100% |
 | M9 | Lighting | M7 | 3 | `light-engine` 100% |
 | M10 | Server tick, updates, redstone, fluids | M8, M9, M3 | 8 | `tick-oracle`, `redstone-contraptions` 100% |

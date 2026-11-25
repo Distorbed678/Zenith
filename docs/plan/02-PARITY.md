@@ -75,6 +75,8 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 | `worldgen-columns` | M7 | The 4 base heights and every block-state id of the base column (density + aquifer + default block/fluid, before surface and carvers) per (x, z) (`TerrainProbe` column mode) | 7 noise settings × 3 seeds × 61 columns |
 | `block-facts` | M8 | Every block state's static facts vs the game (`BlockFacts`): identity, 32 flags, numbers, sound, fluid state, six shape kinds (box lists in order + bounds), position-dependent shapes, face sturdiness / fullness / occlusion | All 35,723 states × 15 field groups |
 | `golden-terrain` | M7 | Blocks, biomes, heightmaps per chunk | 10k chunks × 50 seeds × 3 dimensions |
+| `structure-starts` | M8 | Every structure start held by a chunk (structure, start chunk, references, validity, bounds, every piece's type / bounds / orientation / depth in order) and every structure reference, from the server's chunk dump | Chunks where each of the 52 structure types starts + random chunks, 4 seeds, all dimensions |
+| `golden-terrain-structures` | M8 | `golden-terrain` with structures on: terrain shaped by the beardifier built from the chunk's real structure starts | Chunks around terrain-adapting structures + overlaps, 3 seeds (default) / 12 seeds (scaled) |
 | `golden-features` | M8 | Feature placement incl. block entities | Same corpus |
 | `golden-structures` | M8 | Structure starts/pieces/contents | Same corpus + forced structure seeds |
 | `light-engine` | M9 | Light values after gen and after edits | Corpus + scripted edits |

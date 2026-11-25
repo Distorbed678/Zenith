@@ -4,6 +4,7 @@ mod guard;
 mod oracle;
 mod parity;
 mod parity_blocks;
+mod parity_structures;
 mod parity_terrain;
 mod parity_text;
 mod progress;
@@ -81,6 +82,13 @@ enum ParityCmd {
     },
     /// M7 stage 4: full `terrain`-status chunks (blocks, biomes, 6 heightmaps, post-processing, ticks) vs the game's.
     GoldenTerrain {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
+    /// M8: `structure_starts` & `structure_references` across Overworld, Nether, End vs the game's.
+    StructureStarts {
         #[arg(long, default_value = "26.3")]
         version: String,
         #[arg(long)]
@@ -239,6 +247,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::GoldenTerrain { version, write },
         } => parity_terrain::golden_terrain(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::StructureStarts { version, write },
+        } => parity_structures::structure_starts(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::TextComponent { version, write },
         } => parity_text::text_component(&version, write),

@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T18:35:04Z",
+  "generatedAt": "2026-11-25T22:35:44Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 18.6,
-    "parityPercent": 41.7,
-    "milestonesDone": 3,
+    "percent": 20.5,
+    "parityPercent": 44.7,
+    "milestonesDone": 4,
     "milestonesTotal": 33,
-    "suitesPassing": 14,
-    "suitesTotal": 36
+    "suitesPassing": 16,
+    "suitesTotal": 38
   },
   "phases": [
     {
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 20.2,
+      "percent": 25.2,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -467,10 +467,10 @@
       "id": "M7",
       "phase": "P2",
       "title": "Terrain generation",
-      "status": "in-progress",
+      "status": "done",
       "weight": 8.0,
-      "percent": 94.4,
-      "tasksDone": 8,
+      "percent": 100.0,
+      "tasksDone": 9,
       "tasksTotal": 9,
       "tasks": [
         {
@@ -506,8 +506,8 @@
           "done": true
         },
         {
-          "title": "Full soak run: 10k chunks × 50 seeds, all dimensions",
-          "done": false
+          "title": "Soak: 50 seeds × 14,798 chunks (147,980 checks) identical",
+          "done": true
         }
       ],
       "suites": [
@@ -547,9 +547,9 @@
       "title": "Features & structures",
       "status": "in-progress",
       "weight": 7.0,
-      "percent": 25.0,
-      "tasksDone": 1,
-      "tasksTotal": 6,
+      "percent": 58.6,
+      "tasksDone": 4,
+      "tasksTotal": 7,
       "tasks": [
         {
           "title": "Block shapes + per-state static facts (ADR 0009)",
@@ -565,11 +565,15 @@
         },
         {
           "title": "Structure sets, placement, jigsaw assembly",
-          "done": false
+          "done": true
         },
         {
           "title": "Structure templates loaded from the user's jar",
-          "done": false
+          "done": true
+        },
+        {
+          "title": "Structure terrain adaptation (beardifier from real starts)",
+          "done": true
         },
         {
           "title": "Golden diff incl. block entities & entities",
@@ -581,6 +585,20 @@
           "id": "block-facts",
           "passed": 535845,
           "total": 535845,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
+        },
+        {
+          "id": "structure-starts",
+          "passed": 828,
+          "total": 828,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
+        },
+        {
+          "id": "golden-terrain-structures",
+          "passed": 22230,
+          "total": 22230,
           "percent": 100.0,
           "updatedAt": "2026-11-25"
         },
@@ -1411,8 +1429,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 18.6,
-      "parityPercent": 41.7
+      "percent": 20.5,
+      "parityPercent": 44.7
     }
   ]
 }

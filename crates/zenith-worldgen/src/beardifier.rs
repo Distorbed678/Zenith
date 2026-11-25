@@ -1,7 +1,10 @@
 //! Structure terrain adaptation (`Beardifier`, `docs/specs/worldgen/density-functions.md` §8).
 //!
 //! Provides the complete `Beardifier` interface, `Beardifier::empty()` for chunks with no
-//! structures (exact zero contribution), and the 24³ kernel evaluation ready for milestone M8.
+//! structures (exact zero contribution), and the 24³ kernel evaluation. The pieces and junctions
+//! are collected from a chunk's real structure starts by `zenith-structures`
+//! (`beardifier_from_starts`, `docs/specs/worldgen/structures-placement-and-jigsaw.md` §5.2) and
+//! passed to the terrain step through `TerrainGenerator::generate_chunk_with_hooks`.
 
 use std::sync::OnceLock;
 
@@ -322,4 +325,79 @@ fn beard(dx: i32, dy: i32, dz: i32, y_to_ground: i32) -> f32 {
     let val = (-dy_off * (fast_inv_sqrt(f64::from(d2 / 2.0_f32)) as f32)) / 2.0_f32;
     let idx = (zi as usize) * 576 + (xi as usize) * 24 + (yi as usize);
     val * beard_kernel()[idx]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rigid(adjustment: TerrainAdjustment) -> BeardifierRigid {
+        BeardifierRigid {
+            bounding_box: BoundingBox {
+                min_x: 0,
+                min_y: 60,
+                min_z: 0,
+                max_x: 15,
+                max_y: 70,
+                max_z: 15,
+            },
+            adjustment,
+            ground_level_delta: 1,
+        }
+    }
+
+    #[test]
+    fn empty_is_zero_everywhere() {
+        let b = Beardifier::empty();
+        assert!(b.is_empty());
+        assert_eq!(b.sample_value(0, 64, 0), 0.0);
+    }
+
+    #[test]
+    fn affected_box_is_inflated_by_24() {
+        let b = Beardifier::new(vec![rigid(TerrainAdjustment::Bury)], Vec::new());
+        let bb = b.affected_box().expect("non-empty");
+        assert_eq!((bb.min_x, bb.min_y, bb.min_z), (-24, 36, -24));
+        assert_eq!((bb.max_x, bb.max_y, bb.max_z), (39, 94, 39));
+        // Outside the inflated box the value is exactly zero.
+        assert_eq!(b.sample_value(40, 64, 0), 0.0);
+    }
+
+    #[test]
+    fn bury_is_one_inside_the_box_and_zero_beyond_six_blocks() {
+        let b = Beardifier::new(vec![rigid(TerrainAdjustment::Bury)], Vec::new());
+        // Inside the box horizontally and at ground level: dx = dz = 0, dy = 0 -> 1 - 0/6.
+        assert_eq!(b.sample_value(5, 61, 5), 1.0);
+        // 6 blocks outside horizontally -> d2 = 36 -> 0.
+        assert_eq!(b.sample_value(21, 61, 5), 0.0);
+        // 3 blocks outside horizontally -> 1 - 3/6.
+        assert_eq!(b.sample_value(18, 61, 5), 0.5);
+    }
+
+    #[test]
+    fn beard_modes_are_non_zero_below_ground_inside_the_box() {
+        for mode in [TerrainAdjustment::BeardThin, TerrainAdjustment::BeardBox] {
+            let b = Beardifier::new(vec![rigid(mode)], Vec::new());
+            assert!(b.sample_value(5, 55, 5) != 0.0, "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn none_adjustment_contributes_nothing() {
+        let b = Beardifier::new(vec![rigid(TerrainAdjustment::None)], Vec::new());
+        assert_eq!(b.sample_value(5, 61, 5), 0.0);
+    }
+
+    #[test]
+    fn junction_is_zero_outside_the_kernel_range() {
+        let j = JigsawJunction {
+            source_x: 0,
+            source_ground_y: 64,
+            source_z: 0,
+        };
+        let b = Beardifier::new(Vec::new(), vec![j]);
+        assert!(b.sample_value(1, 63, 1) != 0.0);
+        // dx = +12 is outside the kernel's [-12, 11] range.
+        assert_eq!(b.sample_value(12, 64, 0), 0.0);
+    }
 }

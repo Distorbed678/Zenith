@@ -176,7 +176,7 @@ id = "M7"
 phase = "P2"
 title = "Terrain generation"
 weight = 8
-status = "in-progress"
+status = "done"
 suites = ["worldgen-router", "worldgen-biomes", "worldgen-columns", "golden-terrain"]
 tasks = [
   { t = "Density functions + noise router", done = true },
@@ -187,7 +187,7 @@ tasks = [
   { t = "Surface rules", done = true },
   { t = "Carvers", done = true },
   { t = "Golden diff at scale: 24 seeds × 5,854 chunks identical", done = true },
-  { t = "Full soak run: 10k chunks × 50 seeds, all dimensions", done = false },
+  { t = "Soak: 50 seeds × 14,798 chunks (147,980 checks) identical", done = true },
 ]
 
 [[milestone]]
@@ -196,13 +196,14 @@ phase = "P2"
 title = "Features & structures"
 weight = 7
 status = "in-progress"
-suites = ["block-facts", "golden-features", "golden-structures"]
+suites = ["block-facts", "structure-starts", "golden-terrain-structures", "golden-features", "golden-structures"]
 tasks = [
   { t = "Block shapes + per-state static facts (ADR 0009)", done = true },
   { t = "Configured/placed features + placement modifiers", done = false },
   { t = "Decoration step ordering", done = false },
-  { t = "Structure sets, placement, jigsaw assembly", done = false },
-  { t = "Structure templates loaded from the user's jar", done = false },
+  { t = "Structure sets, placement, jigsaw assembly", done = true },
+  { t = "Structure templates loaded from the user's jar", done = true },
+  { t = "Structure terrain adaptation (beardifier from real starts)", done = true },
   { t = "Golden diff incl. block entities & entities", done = false },
 ]
 

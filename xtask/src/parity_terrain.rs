@@ -9,22 +9,29 @@
 //!
 //! The corpus (seeds and positions) is generated here from fixed constants; nothing of the game's is stored.
 
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Read;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Context;
 use zenith_biome::{
     BiomeSource, ClimateSampler, PointClimate, SearchState, obfuscate_seed, zoomed_biome,
 };
+use zenith_blocks::{BlockFactTags, BlockFacts};
 use zenith_codec::json::{Json, ParseMode, parse_bytes};
 use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
 use zenith_parity::SuiteResult;
 use zenith_registry::{BlockStateTable, Identifier};
+use zenith_structures::{
+    BoundingBoxExt, StructureData, StructureGenerator, StructurePlacement, StructureRef,
+    StructureStart, TemplateManager, potential_random_spread_chunk,
+};
 use zenith_worldgen::{
-    BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState, RouterField,
-    TerrainGenerator, WorldgenData,
+    Blender, BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState, RouterField,
+    TerrainAdjustment, TerrainGenerator, WorldgenData,
 };
 
 use crate::parity::vanilla_command;
@@ -1043,6 +1050,254 @@ fn find_special_overworld_chunks(generator: &TerrainGenerator) -> Vec<(i32, i32)
     found.into_iter().flatten().collect()
 }
 
+// ── golden-terrain, structures-on mode (ZENITH_GOLDEN_STRUCTURES=1) ──────────
+
+/// Structure registries and templates shared by every world of a structures-on `golden-terrain` run.
+struct StructureCtx {
+    data: Arc<StructureData>,
+    templates: Arc<TemplateManager>,
+    facts: Arc<BlockFacts>,
+}
+
+fn load_structure_context(version: &str, ctx: &ColumnContext) -> anyhow::Result<StructureCtx> {
+    let install = zenith_install::discover_installs(Some(version))
+        .into_iter()
+        .next()
+        .context("no install")?;
+    let pack = Arc::new(ZipPackResources::open(
+        "vanilla",
+        &install.client_jar,
+        null_log(),
+    ));
+    let fact_tags = BlockFactTags::from_resolver(&ctx.blocks, |name| {
+        Identifier::parse(name)
+            .ok()
+            .and_then(|id| ctx.tags.block_ids(&id))
+    });
+    let facts = Arc::new(
+        BlockFacts::build(&ctx.blocks, &fact_tags)
+            .map_err(|e| anyhow::anyhow!("build block facts: {e}"))?,
+    );
+    let data = Arc::new(
+        StructureData::load(pack.as_ref(), ctx.data.biome_tags())
+            .map_err(|e| anyhow::anyhow!("load structure data: {e}"))?,
+    );
+    let templates = Arc::new(TemplateManager::new(
+        pack,
+        Arc::new(ctx.blocks.clone()),
+        Some(Arc::clone(&facts)),
+    ));
+    Ok(StructureCtx {
+        data,
+        templates,
+        facts,
+    })
+}
+
+type StartsCache = HashMap<(i32, i32), Vec<StructureStart>>;
+
+/// A dimension's structure generator plus its shared `structure_starts` cache.
+struct StructureDim {
+    generator: StructureGenerator,
+    cache: StartsCache,
+}
+
+/// Chunks (in raster order) overlapping `start`'s adjusted bounding box whose beardifier is non-empty.
+fn beardified_chunks(sd: &mut StructureDim, start: &StructureStart) -> Vec<(i32, i32)> {
+    let bb = start.bounding_box;
+    let mut out = Vec::new();
+    for cz in (bb.min_z >> 4)..=(bb.max_z >> 4) {
+        for cx in (bb.min_x >> 4)..=(bb.max_x >> 4) {
+            if !sd
+                .generator
+                .beardifier_for_chunk_with_cache(cx, cz, &mut sd.cache)
+                .is_empty()
+            {
+                out.push((cx, cz));
+            }
+        }
+    }
+    out
+}
+
+/// Number of terrain-adapting starts whose adjusted box reaches chunk `(cx, cz)` (cache-only).
+fn adapting_starts_at(sd: &StructureDim, cx: i32, cz: i32) -> Vec<&StructureStart> {
+    let mut v = Vec::new();
+    for sx in (cx - 8)..=(cx + 8) {
+        for sz in (cz - 8)..=(cz + 8) {
+            if let Some(starts) = sd.cache.get(&(sx, sz)) {
+                v.extend(starts.iter().filter(|s| {
+                    s.is_valid()
+                        && s.terrain_adaptation != TerrainAdjustment::None
+                        && s.bounding_box.intersects_xz(
+                            cx << 4,
+                            cz << 4,
+                            (cx << 4) + 15,
+                            (cz << 4) + 15,
+                        )
+                }));
+            }
+        }
+    }
+    v
+}
+
+/// Chunks near terrain-adapting structure starts of every structure set of the dimension (villages, outposts,
+/// ancient cities, trail ruins, trial chambers, strongholds, ...), found with `zenith-structures`; vanilla verifies.
+/// Up to `per_structure` starts per structure type and `per_start` chunks per start whose beardifier is non-empty.
+fn structure_corpus(sd: &mut StructureDim, seed: i64) -> Vec<(i32, i32)> {
+    const PER_STRUCTURE: usize = 2;
+    const PER_START: usize = 5;
+    const MAX_CHECKS: usize = 500;
+    const MAX_RADIUS: i32 = 60;
+
+    let mut picked: Vec<StructureStart> = Vec::new();
+    let sets: Vec<_> = sd
+        .generator
+        .placement_state()
+        .possible_structure_sets()
+        .to_vec();
+    for set in &sets {
+        let ids: Vec<Identifier> = set
+            .structures
+            .iter()
+            .map(|e| match &e.structure {
+                StructureRef::Reference(id) => id.clone(),
+                StructureRef::Inline(d) => d.id.clone(),
+            })
+            .collect();
+        let mut counts: BTreeMap<Identifier, usize> = BTreeMap::new();
+        let satisfied = |counts: &BTreeMap<Identifier, usize>| {
+            ids.iter()
+                .all(|id| counts.get(id).copied().unwrap_or(0) >= PER_STRUCTURE)
+        };
+        let mut candidates: Vec<(i32, i32)> = Vec::new();
+        match &set.placement {
+            StructurePlacement::DimensionOrigin => {}
+            StructurePlacement::ConcentricRings { .. } => {
+                candidates.extend(sd.generator.ring_positions_for(set).into_iter().take(12));
+            }
+            StructurePlacement::RandomSpread {
+                common,
+                spacing,
+                separation,
+                spread_type,
+            } => {
+                let mut checked = 0usize;
+                'rings: for r in 0..=MAX_RADIUS {
+                    for gx in -r..=r {
+                        for gz in -r..=r {
+                            if gx.abs().max(gz.abs()) != r {
+                                continue;
+                            }
+                            let (cx, cz) = potential_random_spread_chunk(
+                                seed,
+                                gx * spacing,
+                                gz * spacing,
+                                *spacing,
+                                *separation,
+                                *spread_type,
+                                common.salt,
+                            );
+                            if !sd.generator.is_structure_chunk(set, cx, cz) {
+                                continue;
+                            }
+                            checked += 1;
+                            let starts = sd
+                                .cache
+                                .entry((cx, cz))
+                                .or_insert_with(|| sd.generator.structure_starts(cx, cz));
+                            for s in starts.iter() {
+                                if s.terrain_adaptation != TerrainAdjustment::None
+                                    && ids.contains(&s.structure_id)
+                                {
+                                    let c = counts.entry(s.structure_id.clone()).or_insert(0);
+                                    if *c < PER_STRUCTURE {
+                                        *c += 1;
+                                        picked.push(s.clone());
+                                    }
+                                }
+                            }
+                            if checked >= MAX_CHECKS || satisfied(&counts) {
+                                break 'rings;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (cx, cz) in candidates {
+            let starts = sd
+                .cache
+                .entry((cx, cz))
+                .or_insert_with(|| sd.generator.structure_starts(cx, cz));
+            for s in starts.iter() {
+                if s.terrain_adaptation != TerrainAdjustment::None && ids.contains(&s.structure_id)
+                {
+                    let c = counts.entry(s.structure_id.clone()).or_insert(0);
+                    if *c < PER_STRUCTURE {
+                        *c += 1;
+                        picked.push(s.clone());
+                    }
+                }
+            }
+            if satisfied(&counts) {
+                break;
+            }
+        }
+    }
+
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    for s in &picked {
+        let all = beardified_chunks(sd, s);
+        // The start's own chunk first, then chunks spread evenly over the rest of its footprint.
+        if all.contains(&(s.chunk_x, s.chunk_z)) {
+            out.push((s.chunk_x, s.chunk_z));
+        }
+        let n = all.len();
+        let take = PER_START.min(n);
+        for i in 0..take {
+            let c = all[(i * n + n / 2) / take.max(1) % n.max(1)];
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
+    }
+    // Chunks where terrain-adapting starts of two different structure types overlap: the beardifier sums their
+    // contributions in structure-reference iteration order (density-functions.md §8 / placement spec open question).
+    const MAX_MIXED: usize = 10;
+    let mut mixed: Vec<(i32, i32)> = Vec::new();
+    let mut adapting: Vec<StructureStart> = sd
+        .cache
+        .values()
+        .flatten()
+        .filter(|s| s.is_valid() && s.terrain_adaptation != TerrainAdjustment::None)
+        .cloned()
+        .collect();
+    adapting.sort_by_key(|s| (s.chunk_x, s.chunk_z));
+    'scan: for s in &adapting {
+        let bb = s.bounding_box;
+        for cz in (bb.min_z >> 4)..=(bb.max_z >> 4) {
+            for cx in (bb.min_x >> 4)..=(bb.max_x >> 4) {
+                let near = adapting_starts_at(sd, cx, cz);
+                let kinds: std::collections::BTreeSet<&Identifier> =
+                    near.iter().map(|n| &n.structure_id).collect();
+                if kinds.len() >= 2 && !out.contains(&(cx, cz)) && !mixed.contains(&(cx, cz)) {
+                    mixed.push((cx, cz));
+                    if mixed.len() >= MAX_MIXED {
+                        break 'scan;
+                    }
+                }
+            }
+        }
+    }
+    out.extend(mixed);
+    // The vanilla server fully generates (features included) the chunks around the world spawn, which a
+    // `terrain`-status comparison cannot match; the random corpus avoids the same area (|chunk| <= 32).
+    out.retain(|&(cx, cz)| cx.abs() > 32 || cz.abs() > 32);
+    out
+}
+
 struct GoldenTiming {
     vanilla_ms: u128,
     zenith_ms: u128,
@@ -1056,6 +1311,7 @@ fn golden_terrain_job(
     version: &str,
     seed: i64,
     preset: &str,
+    sctx: Option<&StructureCtx>,
     timing: &std::sync::Mutex<GoldenTiming>,
 ) -> anyhow::Result<Tally> {
     use crate::oracle::{ChunkRequest, ChunkWorld, dump_chunks, parse_chunk_dump};
@@ -1067,6 +1323,7 @@ fn golden_terrain_job(
     // special-surface-pass Overworld chunks (eroded badlands, frozen ocean, sulfur caves, peaks).
     let mut generators: std::collections::HashMap<&str, TerrainGenerator> =
         std::collections::HashMap::new();
+    let mut struct_dims: HashMap<&str, StructureDim> = HashMap::new();
     for &(dim, _) in &dims {
         let (source_json, settings_str, dim_type_str) = preset_dimension(&ctx.jar, preset, dim)?;
         let biome_source = match BiomeSource::decode_json(&source_json) {
@@ -1075,6 +1332,7 @@ fn golden_terrain_job(
         };
         let settings_id = Identifier::parse(&settings_str).map_err(|e| anyhow::anyhow!("{e}"))?;
         let dim_type_id = Identifier::parse(&dim_type_str).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let struct_biome_source = sctx.map(|_| biome_source.clone());
         let mut generator = TerrainGenerator::new(
             &ctx.data,
             biome_source,
@@ -1086,6 +1344,34 @@ fn golden_terrain_job(
         .map_err(|e| anyhow::anyhow!("{preset}/{dim} seed {seed}: {e}"))?;
         if let Some(dh) = ctx.data.dimension_height(&dim_type_id) {
             generator = generator.with_chunk_height(dh.min_y, dh.height);
+        }
+        if let (Some(sc), Some(bs)) = (sctx, struct_biome_source) {
+            let (min_y, height) = ctx
+                .data
+                .dimension_height(&dim_type_id)
+                .map_or((-64, 384), |dh| (dh.min_y, dh.height));
+            let noise_gen = Arc::new(
+                NoiseGenerator::new(&ctx.data, &settings_id, seed, &ctx.blocks, &ctx.tags)
+                    .map_err(|e| anyhow::anyhow!("{preset}/{dim} seed {seed}: {e}"))?,
+            );
+            struct_dims.insert(
+                dim,
+                StructureDim {
+                    generator: StructureGenerator::new(
+                        seed,
+                        &ctx.data,
+                        Arc::clone(&sc.data),
+                        Arc::clone(&sc.templates),
+                        noise_gen,
+                        bs,
+                        Arc::clone(&sc.facts),
+                        &ctx.blocks,
+                        min_y,
+                        height,
+                    ),
+                    cache: HashMap::new(),
+                },
+            );
         }
         generators.insert(dim, generator);
     }
@@ -1123,6 +1409,19 @@ fn golden_terrain_job(
         }
     }
 
+    // Structures-on: add chunks around terrain-adapting structure starts found with zenith-structures.
+    if sctx.is_some() {
+        for (dim, coords) in dims.iter_mut() {
+            if let Some(sd) = struct_dims.get_mut(dim) {
+                for c in structure_corpus(sd, seed) {
+                    if !coords.contains(&c) {
+                        coords.push(c);
+                    }
+                }
+            }
+        }
+    }
+
     let mut requests = Vec::new();
     for (dim, coords) in &dims {
         for &(cx, cz) in coords {
@@ -1138,7 +1437,7 @@ fn golden_terrain_job(
     let world = ChunkWorld {
         seed,
         level_type: format!("minecraft:{preset}"),
-        structures: false,
+        structures: sctx.is_some(),
     };
     let van_start = std::time::Instant::now();
     let raw = dump_chunks(version, &world, &requests)?;
@@ -1155,12 +1454,43 @@ fn golden_terrain_job(
     let mut ow_ms = 0u128;
     let mut ow_count = 0usize;
     let mut zen_chunks = Vec::with_capacity(dumped.len());
+    let mut beardified = 0usize;
+    let mut overlapping = 0usize;
+    let mut covered: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    // Sensitivity check for debugging only: ZENITH_GOLDEN_NO_BEARD=1 must make structures-on runs fail.
+    let no_beard = std::env::var("ZENITH_GOLDEN_NO_BEARD").is_ok_and(|v| v == "1");
     for dc in &dumped {
         let generator = generators
             .get(dc.dimension.as_str())
             .with_context(|| format!("missing generator for {}", dc.dimension))?;
         let t0 = std::time::Instant::now();
-        let chunk = generator.generate_chunk(dc.x, dc.z);
+        let chunk = match struct_dims.get_mut(dc.dimension.as_str()) {
+            Some(sd) => {
+                let b = sd
+                    .generator
+                    .beardifier_for_chunk_with_cache(dc.x, dc.z, &mut sd.cache);
+                beardified += usize::from(!b.is_empty());
+                let near = adapting_starts_at(sd, dc.x, dc.z);
+                if near.len() >= 2 {
+                    overlapping += 1;
+                }
+                for s in near {
+                    covered.insert(format!(
+                        "{}={:?}",
+                        s.structure_id.path(),
+                        s.terrain_adaptation
+                    ));
+                }
+                let hook: Option<Arc<dyn zenith_worldgen::ContextSampler>> =
+                    if b.is_empty() || no_beard {
+                        None
+                    } else {
+                        Some(Arc::new(b))
+                    };
+                generator.generate_chunk_with_hooks(dc.x, dc.z, hook, &Blender::empty())
+            }
+            None => generator.generate_chunk(dc.x, dc.z),
+        };
         if dc.dimension == "minecraft:overworld" {
             ow_ms += t0.elapsed().as_micros();
             ow_count += 1;
@@ -1168,6 +1498,13 @@ fn golden_terrain_job(
         zen_chunks.push(chunk);
     }
     let zen_ms = zen_start.elapsed().as_millis();
+    if sctx.is_some() {
+        println!(
+            "  {preset} seed {seed}: {beardified}/{} chunks have a non-empty beardifier, {overlapping} with >=2 overlapping starts; covered: {}",
+            dumped.len(),
+            covered.iter().cloned().collect::<Vec<_>>().join(" ")
+        );
+    }
     {
         let mut guard = timing.lock().expect("timing");
         guard.vanilla_ms += van_ms;
@@ -1350,6 +1687,13 @@ fn golden_terrain_job(
 /// post-processing marks, tick counts) across 3 seeds × {normal (OW+Nether+End), large_biomes, amplified}.
 pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
     let ctx = load_column_context(version)?;
+    // ZENITH_GOLDEN_STRUCTURES=1: structures-on mode (vanilla worlds with structures, Zenith terrain with beardifier).
+    let structures_on = std::env::var("ZENITH_GOLDEN_STRUCTURES").is_ok_and(|v| v == "1");
+    let sctx = if structures_on {
+        Some(load_structure_context(version, &ctx)?)
+    } else {
+        None
+    };
     let timing = std::sync::Mutex::new(GoldenTiming {
         vanilla_ms: 0,
         zenith_ms: 0,
@@ -1386,10 +1730,10 @@ pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
             {
                 continue;
             }
-            let (ctx, timing) = (&ctx, &timing);
+            let (ctx, timing, sctx) = (&ctx, &timing, sctx.as_ref());
             jobs.push(Box::new(move || {
                 // Report each world as it finishes, so an interrupted soak still shows what it covered.
-                let t = golden_terrain_job(ctx, version, seed, preset, timing)?;
+                let t = golden_terrain_job(ctx, version, seed, preset, sctx, timing)?;
                 println!("  world seed {seed} {preset}: {}/{}", t.passed, t.total);
                 Ok(t)
             }));
@@ -1412,7 +1756,11 @@ pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
         tm.chunks, tm.zenith_ms, zen_per_chunk, ow_per_chunk, tm.vanilla_ms
     );
     report(
-        "golden-terrain",
+        if structures_on {
+            "golden-terrain-structures"
+        } else {
+            "golden-terrain"
+        },
         version,
         &format!(
             "blocks, stored biomes, 6 heightmaps, post-processing marks, ticks; {} seeds × (normal OW+Nether+End, large_biomes, amplified) × {} chunks",
