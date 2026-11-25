@@ -177,14 +177,20 @@ fn text_rules(rel: &str, text: &str) -> Vec<String> {
     let g = game();
     let gl = g.to_lowercase();
     let in_oracle = rel.starts_with("tools/oracle/");
+    // Banners that only appear in decompiler output: blocked everywhere.
     let decompiler_banners = [
         "Decompiled with",
-        "Vineflower",
-        "Fernflower",
         "// $VF:",
         "Decompiled by Procyon",
         "JD-Core",
     ];
+    // Bare tool names: docs may name the tools (e.g. the dev-setup guide), code files may not.
+    let is_doc = rel.ends_with(".md");
+    let tool_names: &[&str] = if is_doc {
+        &[]
+    } else {
+        &["Vineflower", "Fernflower"]
+    };
     let product_misuse = [
         format!("{gl} zenith"),
         format!("zenith {gl}"),
@@ -200,7 +206,7 @@ fn text_rules(rel: &str, text: &str) -> Vec<String> {
         }
         let lower = line.to_lowercase();
         let at = || format!("{rel}:{}", n + 1);
-        for b in decompiler_banners {
+        for b in decompiler_banners.iter().chain(tool_names) {
             if line.contains(b) {
                 v.push(format!(
                     "{}: decompiler banner {b:?}. Decompiled code must never enter the repo",
@@ -325,6 +331,13 @@ mod tests {
         let bad = format!("Welcome to {g} Zenith\n// Decompiled with something\n");
         let v = text_rules("README.md", &bad);
         assert_eq!(v.len(), 2, "{v:?}");
+    }
+
+    #[test]
+    fn tool_names_allowed_in_docs_only() {
+        let line = format!("Decompile locally with {}.\n", ["Vine", "flower"].concat());
+        assert!(text_rules("docs/guide/dev-setup.md", &line).is_empty());
+        assert_eq!(text_rules("crates/x/src/lib.rs", &line).len(), 1);
     }
 
     #[test]

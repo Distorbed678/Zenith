@@ -115,3 +115,15 @@ Answers are quoted or paraphrased faithfully. Where an answer changed an earlier
 | S.3 | Subagents OK with the right model; Gemini subagents only **Gemini 4 Neon** (≈ Opus 5.5) to save Claude usage. | CLAUDE.md rule 2 + memory |
 | S.4 | No gameplay suggestions. | CLAUDE.md rule 1 |
 | S.5 | No Mojang/Minecraft assets in the repo; trademark hygiene; requires a legitimate, launched copy of the matching version. | CLAUDE.md hard rules + `cargo xtask guard` |
+
+## Round 10 — 2026-11-24 — Follow-ups after M0
+
+| # | Question | Options offered | Answer |
+|---|----------|-----------------|--------|
+| 10.1 | (Owner asked) Can Claude still read every line of the original game to catch very specific edge cases (e.g. elytra landing) for true 1:1, without copying? | — | **Yes.** The jar is decompiled locally into `~/.cache/zenith/reference/26.3/` (outside the repo; Vineflower 1.12.0, checksum-verified). It's read to write behavior specs in our own words; implementation comes from specs; the oracle verifies. The owner then said "don't do it now" to the elytra demo, so it was not carried out. |
+| 10.2 | Accept the Minecraft EULA for the oracle's headless vanilla server runs? | Yes: local + CI; local only; no | **Yes: local + CI runs.** Zenith writes `eula=true` only in the oracle's temporary server folders, on the owner's machine and in the nightly parity CI job of the owner's repo. |
+| 10.3 | "Continue the plan" | — | Proceed with M1 (parity harness + data-gen ingestion), autonomous cadence. |
+
+### Clean-room working split (applied from M1 on)
+- **Reader** (main thread): reads local reference code when needed, writes specs in `docs/specs/` in its own words.
+- **Implementer** (delegate or separate session): implements only from specs + public docs. It never reads `~/.cache/zenith/reference/`.
