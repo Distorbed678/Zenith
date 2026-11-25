@@ -114,12 +114,12 @@ id = "M3"
 phase = "P1"
 title = "Saves: region files & level data"
 weight = 3
-status = "planned"
+status = "in-progress"
 suites = ["anvil-io"]
 tasks = [
-  { t = "Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)", done = false },
-  { t = "level.dat, playerdata, entities/ and poi/ region files", done = false },
-  { t = "Session lock + atomic save semantics", done = false },
+  { t = "Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)", done = true },
+  { t = "level.dat, playerdata, entities/ and poi/ region files", done = true },
+  { t = "Session lock + atomic save semantics", done = true },
   { t = "io_uring backend on Linux (opt-in internal, same bytes)", done = false },
   { t = "Vanilla opens Zenith-saved worlds without fixups (oracle check)", done = false },
 ]
@@ -161,10 +161,10 @@ phase = "P2"
 title = "Math, RNG & noise primitives"
 weight = 2
 status = "in-progress"
-suites = ["rng-streams", "noise-samples"]
+suites = ["rng-streams", "noise-samples", "math-helpers"]
 tasks = [
   { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = true },
-  { t = "Java-exact float/double math helpers (sin table, floor, lerp…)", done = false },
+  { t = "Java-exact float/double math helpers (sin table, floor, lerp…)", done = true },
   { t = "Improved/Perlin, Simplex, Blended and Normal noise", done = true },
   { t = "Seed hashing identical to vanilla", done = true },
 ]

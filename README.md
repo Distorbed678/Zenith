@@ -54,7 +54,7 @@ Repo, rules, plan, hygiene guard, ownership proof, tracker, website.
 |---|---|---|---|---|
 | **M0** Foundation & tooling | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)<br>☑ Master plan written (docs/plan/00–13)<br>☑ ADRs for the founding decisions<br>☑ Cargo workspace + pinned toolchain<br>☑ zenith-install: locate installs + local ownership proof<br>☑ Asset/trademark/decompile guard (xtask + pre-commit + CI)<br>☑ Tracker pipeline (milestones → progress.json → SVG)<br>☑ Pixel-crafted design system (packages/ui)<br>☑ Website v1 on GitHub Pages<br>☑ Public GitHub repo + CI | — |
 
-#### P1 Core data: 42.6%
+#### P1 Core data: 47.9%
 
 Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 
@@ -62,17 +62,17 @@ Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 |---|---|---|---|---|
 | **M1** Parity harness & data-gen ingestion | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Java runtime discovery (launcher-bundled Java 25)<br>☑ Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports<br>☑ Compile reports into versioned binary tables (zenith-data)<br>☑ Parity oracle Java agent skeleton (local-only, tools/oracle)<br>☑ State-dump format + differ (zenith-parity)<br>☑ Parity results → progress/parity/*.json → tracker | `datagen-ingest` 44418/44418 |
 | **M2** NBT & SNBT | 🟡 In progress | `▰▰▰▰▰▰▰▰▱▱` 80% | ☑ Binary NBT read/write (file + network variants)<br>☐ Modified UTF-8 + depth/size limits identical to vanilla<br>☐ SNBT parser + printer (vanilla formatting)<br>☑ Fuzz targets (cargo-fuzz)<br>☑ Round-trip every NBT blob in vanilla-generated worlds | `nbt-roundtrip` 47212/47212<br>`snbt-format` 47212/47212 |
-| **M3** Saves: region files & level data | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)<br>☐ level.dat, playerdata, entities/ and poi/ region files<br>☐ Session lock + atomic save semantics<br>☐ io_uring backend on Linux (opt-in internal, same bytes)<br>☐ Vanilla opens Zenith-saved worlds without fixups (oracle check) | `anvil-io` 0/0 |
+| **M3** Saves: region files & level data | 🟡 In progress | `▰▰▰▱▱▱▱▱▱▱` 30% | ☑ Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)<br>☑ level.dat, playerdata, entities/ and poi/ region files<br>☑ Session lock + atomic save semantics<br>☐ io_uring backend on Linux (opt-in internal, same bytes)<br>☐ Vanilla opens Zenith-saved worlds without fixups (oracle check) | `anvil-io` 0/0 |
 | **M4** Registries, identifiers & tags | 🟡 In progress | `▰▰▰▰▰▰▱▱▱▱` 55% | ☑ Identifier type + validation rules<br>☐ Static + dynamic registries with vanilla numeric IDs<br>☑ Block states & properties with identical global state IDs<br>☐ Tag loading + resolution order<br>☑ Feature flags | `registry-ids` 0/0<br>`blockstate-ids` 35723/35723 |
 | **M5** Codecs, data packs & text components | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Codec framework (decode/encode, lenient/strict, error messages)<br>☐ Data pack discovery, overlays, pack.mcmeta version ranges<br>☐ All vanilla data registries parse from the user's jar<br>☐ Text components (JSON + NBT forms), styles, translation<br>☐ Data components (item component system) | `datapack-load` 0/0<br>`text-component` 0/0 |
 
-#### P2 World simulation: 3.1%
+#### P2 World simulation: 3.0%
 
 RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.
 
 | Milestone | Status | Progress | Tasks | Parity suites |
 |---|---|---|---|---|
-| **M6** Math, RNG & noise primitives | 🟡 In progress | `▰▰▰▰▰▰▰▰▰▱` 88% | ☑ Java LCG Random + Xoroshiro128++ + positional factories<br>☐ Java-exact float/double math helpers (sin table, floor, lerp…)<br>☑ Improved/Perlin, Simplex, Blended and Normal noise<br>☑ Seed hashing identical to vanilla | `rng-streams` 38594/38594<br>`noise-samples` 48300/48300 |
+| **M6** Math, RNG & noise primitives | 🟡 In progress | `▰▰▰▰▰▰▰▰▱▱` 83% | ☑ Java LCG Random + Xoroshiro128++ + positional factories<br>☑ Java-exact float/double math helpers (sin table, floor, lerp…)<br>☑ Improved/Perlin, Simplex, Blended and Normal noise<br>☑ Seed hashing identical to vanilla | `rng-streams` 38594/38594<br>`noise-samples` 48300/48300<br>`math-helpers` 0/0 |
 | **M7** Terrain generation | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Density functions + noise router<br>☐ Multi-noise biome source + climate sampler<br>☐ Aquifers, ore veins, noodle caves<br>☐ Surface rules<br>☐ Carvers<br>☐ Golden diff: 10k chunks × 50 seeds, all dimensions | `golden-terrain` 0/0 |
 | **M8** Features & structures | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Configured/placed features + placement modifiers<br>☐ Decoration step ordering<br>☐ Structure sets, placement, jigsaw assembly<br>☐ Structure templates loaded from the user's jar<br>☐ Golden diff incl. block entities & entities | `golden-features` 0/0<br>`golden-structures` 0/0 |
 | **M9** Lighting | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Block + sky light propagation, identical queue order<br>☐ Light during worldgen + updates<br>☐ Deterministic parallel lighting (same result) | `light-engine` 0/0 |

@@ -1,8 +1,11 @@
 # `zenith-math`
 
-Java-exact math primitives, deterministic random number sources, and 26.3 noise generators for
-Zenith, implemented clean-room from [`docs/specs/math/random.md`](../../docs/specs/math/random.md),
-[`docs/specs/math/noise.md`](../../docs/specs/math/noise.md), and public algorithm specifications.
+Java-exact math primitives, deterministic random number sources, 26.3 noise generators, and
+scalar/color/packing/geometry helpers for Zenith, implemented clean-room from
+[`docs/specs/math/random.md`](../../docs/specs/math/random.md),
+[`docs/specs/math/noise.md`](../../docs/specs/math/noise.md),
+[`docs/specs/math/java-math-helpers.md`](../../docs/specs/math/java-math-helpers.md), and public
+algorithm specifications.
 
 ## Modules
 
@@ -43,6 +46,34 @@ Zenith, implemented clean-room from [`docs/specs/math/random.md`](../../docs/spe
     `1.0` selector short-circuiting and volume evaluation.
   - `utils`: `java_math_sin`, `bias_towards_extreme`, and Java `HALF_UP` `parity_octave_config` /
     `parity_octave_config_i32`.
+- **`helpers`**:
+  - `intrinsics`: Centralized JVM-intrinsic-sensitive wrappers (`java_math_sin`, `java_math_cos`,
+    `java_math_asin`, `java_math_atan2`, `java_math_log`, `java_math_exp`, `java_math_pow`).
+  - `trig`: Lazily initialized 65,536-entry `f32` sine table (`sin`, `cos`) and 257-entry
+    table-plus-Taylor `atan2` / `try_atan2`.
+  - `roots`: `sqrt`, `inv_sqrt_f32`/`f64`, `fast_inv_sqrt`, and `fast_inv_cube_root`.
+  - `rounding`: Java float/int primitives (`java_min_*`, `java_max_*`, `java_round_*`,
+    `java_clamp_*`, `java_floor_div_*`, `java_floor_mod_*`), `floor`/`ceil`/`frac`/`clamp`/`sign`/
+    `equal`, `positive_modulo`, `positive_ceil_div`, `round_toward`, `quantize`,
+    `mul_and_truncate`, `Divisor`, `is_power_of_two`, `smallest_encompassing_power_of_two`,
+    `ceillog2`, `log2`, `smallest_square_side`, `binary_search`, and `OutFromOrigin`.
+  - `interp`: `lerp`/`lerp2`/`lerp3`/`clamped_lerp`/`lerp_int`/`lerp_discrete`/`inverse_lerp`/
+    `map`/`clamped_map`, `smoothstep`, `catmullrom`, `triangle_wave`, all 32 named `Ease` curves,
+    `CubicBezier` solver, `CubicSpline` with conservative `Interval` range, `SmoothDouble`, and
+    `BinaryAnimator`.
+  - `angles`: `wrap_degrees_*`, `wrap_degrees_90`, `degrees_difference`, `rotate_if_necessary`,
+    `approach`, `approach_degrees`, `rot_lerp_*`, `rot_lerp_rad`, `pack_degrees`/`unpack_degrees`,
+    `SegmentedAnglePrecision`, and `Quaternionf` / `rotation_around_axis`.
+  - `hash`: `murmur_hash3_mixer`, quadratic `lcg_next`, `chunk_pos_hash`, `vec3i_hash_code`,
+    `get_seed`, bounded RNG helpers (`next_int`/`float`/`double`, `random_between_inclusive`,
+    `random_between`, `normal`), `wobble`, and `create_insecure_uuid` (`Uuid128`).
+  - `color`: 32-bit ARGB/ABGR ops, lazily initialized 10-bit `SRGB_TO_LINEAR`/`LINEAR_TO_SRGB`
+    tables, `mean_linear`/`linear_lerp`/`srgb_lerp`, blending/brightness/HSV (`hsv_to_rgb`,
+    `hsv_to_argb`), and 4-bit/8-bit `LightCoordsUtil` packing and blending.
+  - `packing`: 64-bit `BlockPos`, `SectionPos` (plus 12-bit `section_relative_pos`), and
+    `ChunkPos` packing, region conversions, and `QuartPos` shifts.
+  - `geom`: `Vec3i`, `Vec3`, `Vec2`, `LpVec3` encode/decode, `Aabb` (canonicalizing constructor,
+    slab `clip`/`clip_many`, `collided_along_vector`), `AabbBuilder`, and SAT `ray_intersects_aabb`.
 
 ## Verification
 

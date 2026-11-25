@@ -37,9 +37,17 @@
 //! let _ = chunk_rng.next_gaussian();
 //! ```
 
+pub mod helpers;
 pub mod java;
 pub mod noise;
 pub mod random;
+
+pub use helpers::{
+    Aabb, AabbBuilder, Axis, BinaryAnimator, CubicBezier, CubicSpline, Direction, Divisor, Ease,
+    EasingType, IdentityCoordinate, LpVec3DecodeError, OutFromOrigin, Quaternionf,
+    SegmentedAnglePrecision, SmoothDouble, SplineCoordinate, SplineError, Uuid128, Vec2, Vec3,
+    Vec3i,
+};
 
 pub use noise::{
     BlendedNoise, BlendedNoiseParameters, GradientNoiseState, Interval, Noise, NoiseError,
