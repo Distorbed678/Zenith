@@ -25,6 +25,10 @@ ureq.workspace = true
 clap.workspace = true
 dirs.workspace = true
 flate2.workspace = true
+libz-sys.workspace = true
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+libz-sys = { workspace = true, features = ["static"] }
 
 [lints]
 workspace = true

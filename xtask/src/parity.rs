@@ -767,3 +767,189 @@ pub fn blockstate_ids(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     Ok(matched == total)
 }
+
+// ── anvil-io ─────────────────────────────────────────────────────────────────
+
+/// How many region files to sample (deterministic: sorted by path).
+const ANVIL_MAX_REGIONS: usize = 48;
+
+fn anvil_regions(extra: &[PathBuf]) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for root in world_roots(extra) {
+        walk(&root, &mut files);
+    }
+    let mut regions: Vec<PathBuf> = files
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "mca"))
+        .filter(|p| {
+            let parent = p
+                .parent()
+                .and_then(|d| d.file_name())
+                .map(|n| n.to_string_lossy().into_owned());
+            matches!(parent.as_deref(), Some("region" | "entities" | "poi"))
+        })
+        .filter(|p| fs::metadata(p).is_ok_and(|m| m.len() >= 8192))
+        .collect();
+    regions.sort();
+    regions.truncate(ANVIL_MAX_REGIONS);
+    regions
+}
+
+/// Copy a region file plus every external `.mcc` beside it, so neither engine ever opens (and pads) the original.
+fn copy_region(src: &Path, dst_dir: &Path) -> anyhow::Result<PathBuf> {
+    fs::create_dir_all(dst_dir)?;
+    let dst = dst_dir.join(src.file_name().context("region name")?);
+    fs::copy(src, &dst)?;
+    if let Some(dir) = src.parent() {
+        for e in fs::read_dir(dir)?.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if name.starts_with("c.") && name.ends_with(".mcc") {
+                fs::copy(e.path(), dst_dir.join(&name))?;
+            }
+        }
+    }
+    Ok(dst)
+}
+
+/// `anvil-io`: Zenith reads every chunk of real vanilla region files and writes its own copy; vanilla then reads the
+/// original and Zenith's copy with its own region code and compares chunks with its own equality. A second check
+/// compares the sector layout of Zenith's copy with the copy vanilla writes in the same order.
+pub fn anvil_io(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Result<bool> {
+    use zenith_storage::{CompressionId, RegionFile, RegionFileOptions, RegionPos};
+    let work = zenith_install::cache_dir().join("parity/anvil-io");
+    if work.exists() {
+        fs::remove_dir_all(&work)?;
+    }
+    fs::create_dir_all(&work)?;
+    let options = RegionFileOptions {
+        sync_writes: false,
+        compression: CompressionId::Zlib,
+    };
+
+    let mut pairs = String::new();
+    let mut jobs: Vec<(PathBuf, PathBuf, PathBuf)> = Vec::new(); // (source, zenith copy, vanilla copy)
+    let mut zenith_errors: Vec<String> = Vec::new();
+    for (i, src) in anvil_regions(extra).into_iter().enumerate() {
+        let name = src
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let Some(region) = RegionPos::parse_filename(&name) else {
+            continue;
+        };
+        let dir = work.join(i.to_string());
+        let for_zenith = copy_region(&src, &dir.join("orig-zenith"))?;
+        let for_vanilla = copy_region(&src, &dir.join("orig-vanilla"))?;
+        fs::create_dir_all(dir.join("zenith"))?;
+        fs::create_dir_all(dir.join("vanilla"))?;
+        let zen_path = dir.join("zenith").join(&name);
+        let van_path = dir.join("vanilla").join(&name);
+
+        let mut reader = RegionFile::open(&for_zenith, for_zenith.parent().expect("dir"), options)?;
+        let mut writer = RegionFile::open(&zen_path, zen_path.parent().expect("dir"), options)?;
+        for slot in 0..1024u32 {
+            let pos = region.chunk_pos((slot & 31) as u8, (slot >> 5) as u8);
+            match reader.read_chunk(pos) {
+                Ok(Some(chunk)) => {
+                    if let Err(e) = writer.write_chunk(pos, &chunk) {
+                        zenith_errors.push(format!("{} slot {slot}: write: {e}", src.display()));
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => zenith_errors.push(format!("{} slot {slot}: read: {e}", src.display())),
+            }
+        }
+        reader.close()?;
+        writer.close()?;
+        pairs.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            for_vanilla.display(),
+            zen_path.display(),
+            van_path.display(),
+            region.x,
+            region.z
+        ));
+        jobs.push((src, zen_path, van_path));
+    }
+
+    let pairs_file = work.join("pairs.tsv");
+    fs::write(&pairs_file, pairs)?;
+    let flags_file = work.join("flags.bin");
+    let (install, java) = crate::oracle::install_and_java(version)?;
+    let agent = crate::oracle::build(version)?;
+    let mut cp = zenith_install::libraries::game_classpath(&install)?;
+    cp.push(agent);
+    let out = std::process::Command::new(&java.java)
+        .arg("-cp")
+        .arg(zenith_install::libraries::join_classpath(&cp))
+        .arg("dev.zenith.oracle.RegionCheck")
+        .arg(&pairs_file)
+        .arg(&flags_file)
+        .output()
+        .context("run vanilla region check")?;
+    anyhow::ensure!(
+        out.status.success(),
+        "vanilla region check failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let flags = fs::read(&flags_file)?;
+    anyhow::ensure!(flags.len() == jobs.len() * 1024, "unexpected flag count");
+
+    let (mut chunk_pass, mut chunk_total, mut layout_pass, mut identical_files) =
+        (0u64, 0u64, 0u64, 0usize);
+    let mut failures = Vec::new();
+    for (j, (src, zen, van)) in jobs.iter().enumerate() {
+        for (slot, &b) in flags[j * 1024..(j + 1) * 1024].iter().enumerate() {
+            if b & 1 == 0 {
+                continue; // no chunk in the original
+            }
+            chunk_total += 1;
+            if b & 2 != 0 && b & 4 != 0 {
+                chunk_pass += 1;
+            } else if failures.len() < 10 {
+                failures.push(format!(
+                    "{} slot {slot}: zenith copy {}",
+                    src.display(),
+                    if b & 2 == 0 { "missing" } else { "differs" }
+                ));
+            }
+        }
+        let (zb, vb) = (fs::read(zen)?, fs::read(van)?);
+        let layout_same = zb.len() == vb.len() && zb.get(..4096) == vb.get(..4096);
+        if layout_same {
+            layout_pass += 1;
+        } else if failures.len() < 10 {
+            failures.push(format!(
+                "{}: sector layout differs (zenith {} bytes, vanilla {} bytes)",
+                src.display(),
+                zb.len(),
+                vb.len()
+            ));
+        }
+        // Informational: identical apart from the timestamp table (bytes 4096..8192)?
+        if layout_same && zb.get(8192..) == vb.get(8192..) {
+            identical_files += 1;
+        }
+    }
+    let regions = jobs.len() as u64;
+    println!(
+        "anvil-io {version}: chunks round-tripped {chunk_pass}/{chunk_total}, sector layouts identical {layout_pass}/{regions} \
+         (files byte-identical apart from timestamps: {identical_files}/{regions})"
+    );
+    for e in zenith_errors.iter().take(5) {
+        println!("  ZENITH ERROR {e}");
+    }
+    for f in &failures {
+        println!("  FAIL {f}");
+    }
+    // Copies of game data: keep nothing, unless explicitly debugging (ZENITH_PARITY_KEEP=1, local only).
+    if std::env::var("ZENITH_PARITY_KEEP").as_deref() != Ok("1") {
+        let _ = fs::remove_dir_all(&work);
+    }
+    let (passed, total) = (chunk_pass + layout_pass, chunk_total + regions);
+    if write {
+        SuiteResult::new("anvil-io", version, passed, total)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(passed == total && zenith_errors.is_empty())
+}

@@ -24,7 +24,12 @@ zenith-nbt = { path = "../crates/zenith-nbt" }
 zenith-math = { path = "../crates/zenith-math" }
 zenith-data = { path = "../crates/zenith-data" }
 zenith-registry = { path = "../crates/zenith-registry" }
+zenith-storage = { path = "../crates/zenith-storage" }
 flate2.workspace = true
+libz-sys.workspace = true
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+libz-sys = { workspace = true, features = ["static"] }
 
 [lints]
 workspace = true

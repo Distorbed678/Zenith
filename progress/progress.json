@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T01:56:29Z",
+  "generatedAt": "2026-11-25T03:37:31Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 8.1,
-    "parityPercent": 18.8,
+    "percent": 9.3,
+    "parityPercent": 21.9,
     "milestonesDone": 2,
     "milestonesTotal": 33,
-    "suitesPassing": 6,
+    "suitesPassing": 7,
     "suitesTotal": 32
   },
   "phases": [
@@ -28,7 +28,7 @@
       "id": "P1",
       "title": "Core data",
       "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
-      "percent": 47.9,
+      "percent": 58.5,
       "weight": 17.0,
       "milestones": [
         "M1",
@@ -273,8 +273,8 @@
       "title": "Saves: region files & level data",
       "status": "in-progress",
       "weight": 3.0,
-      "percent": 30.0,
-      "tasksDone": 3,
+      "percent": 90.0,
+      "tasksDone": 4,
       "tasksTotal": 5,
       "tasks": [
         {
@@ -295,16 +295,16 @@
         },
         {
           "title": "Vanilla opens Zenith-saved worlds without fixups (oracle check)",
-          "done": false
+          "done": true
         }
       ],
       "suites": [
         {
           "id": "anvil-io",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 7779,
+          "total": 7779,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1359,8 +1359,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 8.1,
-      "parityPercent": 18.8
+      "percent": 9.3,
+      "parityPercent": 21.9
     }
   ]
 }

@@ -27,7 +27,12 @@ clap = { version = "4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 walkdir = "2"
 dirs = "6"
-flate2 = "1"
+# Compress with the same zlib the JVM uses on this platform, so compressed bytes match vanilla on the same machine:
+# Linux JDKs link the *system* zlib (e.g. zlib-ng-compat on some distros), so we link it dynamically there; Windows
+# and macOS JDKs bundle stock zlib, so crates add the `static` feature for those targets.
+# See docs/specs/storage/region-and-level.md (parity status).
+flate2 = { version = "1", default-features = false, features = ["zlib"] }
+libz-sys = { version = "1", default-features = false, features = ["libc"] }
 postcard = { version = "1", default-features = false, features = ["use-std"] }
 
 [workspace.lints.rust]

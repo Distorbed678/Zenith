@@ -78,8 +78,12 @@ fn write_mutf8_string<W: Write>(w: &mut W, s: &impl AsNbtString) -> Result<(), E
     let len = u16::try_from(encoded.len()).map_err(|_| Error::StringTooLong {
         encoded_len: encoded.len(),
     })?;
-    w.write_all(&len.to_be_bytes())?;
-    w.write_all(&encoded)?;
+    // One write for length + bytes, like Java's writeUTF: write boundaries decide where an upstream 8 KiB buffer
+    // flushes, which some zlib implementations are sensitive to (see the storage spec's parity status).
+    let mut out = Vec::with_capacity(2 + encoded.len());
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(&encoded);
+    w.write_all(&out)?;
     Ok(())
 }
 
@@ -372,8 +376,10 @@ fn write_wrapped_list_element<W: Write>(w: &mut W, elem: &Tag) -> Result<(), Err
     if ty == TagType::End {
         return Err(FormatError::InvalidTagPlacement(TagType::End).into());
     }
-    // Single-entry compound `{ "": elem }`: type ID, empty string (0x00 0x00), payload, End (0x00).
-    w.write_all(&[ty.id(), 0, 0])?;
+    // Single-entry compound `{ "": elem }`: type ID, empty name (0x00 0x00), payload, End (0x00), as separate writes
+    // (type byte, then the name), matching Java's write granularity.
+    w.write_all(&[ty.id()])?;
+    w.write_all(&[0, 0])?;
     write_payload(w, elem)?;
     w.write_all(&[TagType::End.id()])?;
     Ok(())
@@ -383,13 +389,9 @@ fn write_wrapped_list_element<W: Write>(w: &mut W, elem: &Tag) -> Result<(), Err
 fn write_byte_array<W: Write>(w: &mut W, arr: &[i8]) -> Result<(), Error> {
     let len = i32::try_from(arr.len()).map_err(|_| FormatError::NegativeLength(i32::MIN))?;
     w.write_all(&len.to_be_bytes())?;
-    let mut chunk = [0u8; 4096];
-    for slice in arr.chunks(chunk.len()) {
-        for (dst, &src) in chunk.iter_mut().zip(slice.iter()) {
-            *dst = src as u8;
-        }
-        w.write_all(&chunk[..slice.len()])?;
-    }
+    // The whole array in one write, like Java (write granularity affects upstream buffer flush points).
+    let bytes: Vec<u8> = arr.iter().map(|&b| b as u8).collect();
+    w.write_all(&bytes)?;
     Ok(())
 }
 

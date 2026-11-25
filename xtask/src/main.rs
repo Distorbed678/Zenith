@@ -55,6 +55,15 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Zenith copies real vanilla region files; vanilla reads both and compares chunks and sector layouts.
+    AnvilIo {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        worlds: Vec<PathBuf>,
+        #[arg(long)]
+        write: bool,
+    },
     /// Compute every block-state ID from the spec rule and compare with vanilla's report.
     BlockstateIds {
         #[arg(long, default_value = "26.3")]
@@ -137,6 +146,14 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd:
+                ParityCmd::AnvilIo {
+                    version,
+                    worlds,
+                    write,
+                },
+        } => parity::anvil_io(&version, &worlds, write),
         Cmd::Parity {
             cmd: ParityCmd::BlockstateIds { version, write },
         } => parity::blockstate_ids(&version, write),

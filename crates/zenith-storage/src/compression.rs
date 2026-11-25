@@ -3,7 +3,7 @@
 use std::io::{BufReader, BufWriter, Read, Write};
 
 use flate2::read::{GzDecoder, ZlibDecoder};
-use flate2::write::{GzEncoder, ZlibEncoder};
+use flate2::write::GzEncoder;
 use flate2::{Compression, GzBuilder};
 
 use crate::error::{Result, StorageError};
@@ -124,7 +124,9 @@ where
 {
     match compression {
         CompressionId::Zlib => {
-            let encoder = ZlibEncoder::new(out, Compression::default());
+            // Same call pattern as the JVM's buffered deflater stream, so zlib variants whose block decisions depend
+            // on it (e.g. zlib-ng) produce identical bytes; see `JvmDeflater`.
+            let encoder = JvmDeflater::new(out);
             let mut buffered = BufWriter::with_capacity(STREAM_BUFFER_SIZE, encoder);
             write_fn(&mut buffered)?;
             let encoder = buffered.into_inner().map_err(|e| e.into_error())?;
@@ -193,5 +195,70 @@ pub fn open_chunk_decompressor<'a>(
             }
             Ok(None)
         }
+    }
+}
+
+/// A zlib writer that drives the compressor exactly like the JDK's default deflater output stream (public JDK
+/// behavior): each `write` hands the whole slice to the compressor and calls it with no flush and a 512-byte output
+/// window until the input is consumed; `finish` repeats finish calls with 512-byte windows until the stream ends.
+/// Level 6 (zlib's default), zlib header + Adler-32 trailer.
+struct JvmDeflater<'a> {
+    out: &'a mut Vec<u8>,
+    z: flate2::Compress,
+}
+
+const JVM_DEFLATE_WINDOW: usize = 512;
+
+impl<'a> JvmDeflater<'a> {
+    fn new(out: &'a mut Vec<u8>) -> Self {
+        Self {
+            out,
+            z: flate2::Compress::new(Compression::default(), true),
+        }
+    }
+
+    fn step(
+        &mut self,
+        input: &[u8],
+        flush: flate2::FlushCompress,
+    ) -> std::io::Result<(usize, flate2::Status)> {
+        let mut window = [0u8; JVM_DEFLATE_WINDOW];
+        let (before_in, before_out) = (self.z.total_in(), self.z.total_out());
+        let status = self
+            .z
+            .compress(input, &mut window, flush)
+            .map_err(std::io::Error::other)?;
+        let produced = (self.z.total_out() - before_out) as usize;
+        self.out.extend_from_slice(&window[..produced]);
+        Ok(((self.z.total_in() - before_in) as usize, status))
+    }
+
+    fn finish(mut self) -> std::io::Result<()> {
+        loop {
+            if let (_, flate2::Status::StreamEnd) = self.step(&[], flate2::FlushCompress::Finish)? {
+                return Ok(());
+            }
+        }
+    }
+}
+
+impl Write for JvmDeflater<'_> {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        let mut consumed = 0;
+        // Like the JVM stream: keep calling while input remains; a full output window means call again even if
+        // the input is already consumed (more output may be pending).
+        loop {
+            let before_out = self.z.total_out();
+            let (n, _) = self.step(&data[consumed..], flate2::FlushCompress::None)?;
+            consumed += n;
+            let window_full = (self.z.total_out() - before_out) as usize == JVM_DEFLATE_WINDOW;
+            if consumed == data.len() && !window_full {
+                return Ok(data.len());
+            }
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }

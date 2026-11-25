@@ -17,12 +17,16 @@ serde = ["dep:serde"]
 [dependencies]
 thiserror.workspace = true
 flate2.workspace = true
+libz-sys.workspace = true
 unicode_names2 = "2"
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+libz-sys = { workspace = true, features = ["static"] }
 
 [lints]
 workspace = true

@@ -9,6 +9,7 @@
 | pnpm | 10+ | JS workspace |
 | Java | 25 (your launcher's bundled runtime works) | Only for data-gen ingestion and the parity oracle |
 | Vulkan SDK | 1.3+ | Validation layers while developing the renderer |
+| zlib dev headers (Linux) | any | Zenith links the system zlib on Linux, like the JVM does, so compressed saves match vanilla byte for byte (`zlib`/`zlib-ng-compat` + `pkg-config`) |
 
 ## First steps
 

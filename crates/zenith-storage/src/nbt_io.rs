@@ -60,9 +60,11 @@ pub fn compound_has_oversized_string(compound: &Compound) -> bool {
 fn write_mutf8_fallback<W: Write + ?Sized>(w: &mut W, s: &NbtString) -> Result<()> {
     match s.encode_mutf8() {
         Ok(encoded) => {
-            let len = encoded.len() as u16;
-            w.write_all(&len.to_be_bytes())?;
-            w.write_all(&encoded)?;
+            // One write for length + bytes, like Java's writeUTF (write boundaries matter for compression parity).
+            let mut out = Vec::with_capacity(2 + encoded.len());
+            out.extend_from_slice(&(encoded.len() as u16).to_be_bytes());
+            out.extend_from_slice(&encoded);
+            w.write_all(&out)?;
             Ok(())
         }
         Err(NbtError::StringTooLong { encoded_len }) => {

@@ -362,8 +362,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
 dependencies = [
  "crc32fast",
+ "libz-sys",
  "miniz_oxide",
- "zlib-rs",
 ]
 
 [[package]]
@@ -626,6 +626,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libz-sys"
+version = "1.1.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fee3f59f4321dab0c78d828942e7aa09d0bd8ad6e78a501977e6bf3d02938045"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -751,6 +763,12 @@ name = "pin-project-lite"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752"
+
+[[package]]
+name = "pkg-config"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "postcard"
@@ -1251,6 +1269,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 
 [[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1489,6 +1513,7 @@ dependencies = [
  "clap",
  "flate2",
  "hex",
+ "libz-sys",
  "serde",
  "serde_json",
  "sha1",
@@ -1500,6 +1525,7 @@ dependencies = [
  "zenith-nbt",
  "zenith-parity",
  "zenith-registry",
+ "zenith-storage",
  "zip",
 ]
 
@@ -1555,6 +1581,7 @@ dependencies = [
  "dirs",
  "flate2",
  "hex",
+ "libz-sys",
  "rayon",
  "serde",
  "serde_json",
@@ -1578,6 +1605,7 @@ name = "zenith-nbt"
 version = "0.0.1"
 dependencies = [
  "flate2",
+ "libz-sys",
  "serde",
  "serde_json",
  "thiserror",
@@ -1612,6 +1640,7 @@ dependencies = [
  "chrono",
  "flate2",
  "libc",
+ "libz-sys",
  "log",
  "lz4_flex",
  "tempfile",
@@ -1714,12 +1743,6 @@ dependencies = [
  "memchr",
  "zopfli",
 ]
-
-[[package]]
-name = "zlib-rs"
-version = "0.6.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa76918995d776d9dd34d371030be228d021137449771493d56e29f77e4148ac"
 
 [[package]]
 name = "zmij"

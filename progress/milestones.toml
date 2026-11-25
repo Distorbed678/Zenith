@@ -121,7 +121,7 @@ tasks = [
   { t = "level.dat, playerdata, entities/ and poi/ region files", done = true },
   { t = "Session lock + atomic save semantics", done = true },
   { t = "io_uring backend on Linux (opt-in internal, same bytes)", done = false },
-  { t = "Vanilla opens Zenith-saved worlds without fixups (oracle check)", done = false },
+  { t = "Vanilla opens Zenith-saved worlds without fixups (oracle check)", done = true },
 ]
 
 [[milestone]]
