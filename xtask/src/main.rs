@@ -71,6 +71,13 @@ enum ParityCmd {
         #[arg(long)]
         write: bool,
     },
+    /// M7 stage 3: base column heights (4 heightmaps) and block-state IDs vs the game's.
+    WorldgenColumns {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Text components: decode, JSON + NBT re-encode and plain-string flattening vs the game's own.
     TextComponent {
         #[arg(long, default_value = "26.3")]
@@ -205,6 +212,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::WorldgenBiomes { version, write },
         } => parity_terrain::worldgen_biomes(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::WorldgenColumns { version, write },
+        } => parity_terrain::worldgen_columns(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::TextComponent { version, write },
         } => parity_text::text_component(&version, write),

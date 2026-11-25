@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T10:13:34Z",
+  "generatedAt": "2026-11-25T15:18:53Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 15.0,
-    "parityPercent": 35.3,
+    "percent": 15.7,
+    "parityPercent": 37.1,
     "milestonesDone": 3,
     "milestonesTotal": 33,
-    "suitesPassing": 11,
-    "suitesTotal": 34
+    "suitesPassing": 12,
+    "suitesTotal": 35
   },
   "phases": [
     {
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 10.7,
+      "percent": 12.5,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -469,9 +469,9 @@
       "title": "Terrain generation",
       "status": "in-progress",
       "weight": 8.0,
-      "percent": 50.0,
-      "tasksDone": 2,
-      "tasksTotal": 6,
+      "percent": 62.5,
+      "tasksDone": 4,
+      "tasksTotal": 8,
       "tasks": [
         {
           "title": "Density functions + noise router",
@@ -482,7 +482,15 @@
           "done": true
         },
         {
-          "title": "Aquifers, ore veins, noodle caves",
+          "title": "Noise chunk, terrain fill, heightmaps",
+          "done": true
+        },
+        {
+          "title": "Aquifers",
+          "done": true
+        },
+        {
+          "title": "Ore veins (material rule), noodle caves",
           "done": false
         },
         {
@@ -510,6 +518,13 @@
           "id": "worldgen-biomes",
           "passed": 29409,
           "total": 29409,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
+        },
+        {
+          "id": "worldgen-columns",
+          "passed": 2562,
+          "total": 2562,
           "percent": 100.0,
           "updatedAt": "2026-11-25"
         },
@@ -1381,8 +1396,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 15.0,
-      "parityPercent": 35.3
+      "percent": 15.7,
+      "parityPercent": 37.1
     }
   ]
 }

@@ -898,5 +898,6 @@ A black-box Java parity agent/probe for `golden-terrain` should dump outputs at 
 (edge cases: cell and chunk boundaries, negatives, ±2²⁴, the world border; plus random points in three distance
 bands) and the 6 aquifer-config functions where present, for all 7 built-in noise settings × 3 seeds; and whole
 final-density (16×H×16) and climate (stride 4) chunk volumes through the caching path for 2 seeds × 3 chunks each.
-Sections 6–9 (noise chunk interpolation into blocks, terrain fill, beardifier, blending) are verified by the base
-column and `golden-terrain` stages.
+`worldgen-columns`: **2,562/2,562** identical: the 4 base heights and every block-state id of the base column (§6–7 with
+the aquifer of `aquifers-and-ore-veins.md`) at 61 columns for all 7 noise settings × 3 seeds. §8 (beardifier with
+structures) and §9 (old-chunk blending) are interfaces only so far; full chunks are verified by `golden-terrain`.

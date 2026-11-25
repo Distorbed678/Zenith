@@ -4,6 +4,8 @@
 //!   plus whole-chunk volumes of final density and the six climate channels (caching volume path).
 //! * `worldgen-biomes`: quantized climate target points, the chosen biome per quart position for every built-in
 //!   biome source plus hand-made fixed/checkerboard sources, the obfuscated zoom seed and zoomed block biomes.
+//! * `worldgen-columns`: base heights (4 heightmaps) and full vertical base column block-state IDs across all 7
+//!   noise settings (exercising `NoiseChunk`, `Aquifer`, global fluid picker, and block-tag heightmap predicates).
 //!
 //! The corpus (seeds and positions) is generated here from fixed constants; nothing of the game's is stored.
 
@@ -19,8 +21,10 @@ use zenith_codec::json::{Json, ParseMode, parse_bytes};
 use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
 use zenith_parity::SuiteResult;
-use zenith_registry::Identifier;
-use zenith_worldgen::{DensityVolume, RandomState, RouterField, WorldgenData};
+use zenith_registry::{BlockStateTable, Identifier};
+use zenith_worldgen::{
+    BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState, RouterField, WorldgenData,
+};
 
 use crate::parity::vanilla_command;
 use crate::repo_root;
@@ -731,6 +735,159 @@ pub fn worldgen_biomes(version: &str, write: bool) -> anyhow::Result<bool> {
         "worldgen-biomes",
         version,
         "quantized climate per quart (7 settings), biomes per quart + zoomed per block for 5 built-in and 4 hand-made sources",
+        &t,
+        write,
+    )
+}
+
+// ── worldgen-columns ─────────────────────────────────────────────────────────
+
+struct ColumnContext {
+    data: WorldgenData,
+    blocks: BlockStateTable,
+    tags: BlockTags,
+}
+
+fn load_column_context(version: &str) -> anyhow::Result<ColumnContext> {
+    let install = zenith_install::discover_installs(Some(version))
+        .into_iter()
+        .next()
+        .context("no install")?;
+    let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
+        .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
+    let blocks = BlockStateTable::from_tables(&tables)
+        .map_err(|e| anyhow::anyhow!("build block-state table: {e}"))?;
+    let pack = ZipPackResources::open("vanilla", &install.client_jar, null_log());
+    let data = WorldgenData::load(&pack).map_err(|e| anyhow::anyhow!("load worldgen data: {e}"))?;
+    let tags =
+        BlockTags::load(&pack, &blocks).map_err(|e| anyhow::anyhow!("load block tags: {e}"))?;
+    Ok(ColumnContext { data, blocks, tags })
+}
+
+fn column_points(min_y: i32, height: i32, n_random: usize, salt: u64) -> Vec<(i32, i32)> {
+    let mut cols = Vec::with_capacity(n_random + 16);
+    for (x, _, z) in block_points(min_y, height, n_random, salt) {
+        if !cols.contains(&(x, z)) {
+            cols.push((x, z));
+        }
+    }
+    cols
+}
+
+fn describe_state(blocks: &BlockStateTable, id: u32) -> String {
+    match blocks.state_by_id_exact(id as i32) {
+        Some(s) if s.properties.is_empty() => format!("{id} ({})", s.block_id),
+        Some(s) => {
+            let props: Vec<String> = s
+                .properties
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            format!("{id} ({}[{}])", s.block_id, props.join(","))
+        }
+        None => format!("{id} (<unknown>)"),
+    }
+}
+
+fn column_job(
+    ctx: &ColumnContext,
+    version: &str,
+    seed: i64,
+    settings: &str,
+    min_y: i32,
+    height: i32,
+) -> anyhow::Result<Tally> {
+    let mut t = Tally::default();
+    let salt = (seed as u64) ^ (settings.len() as u64) << 32 ^ (min_y as u64) ^ 0xC01A_0001;
+    let cols = column_points(min_y, height, 50, salt);
+    let mut input = In::header(seed, settings);
+    input.u32(cols.len());
+    for &(x, z) in &cols {
+        input.i32(x);
+        input.i32(z);
+    }
+    let raw = run_probe(version, "column", &input)?;
+    let mut o = Out::new(&raw, 5)?;
+    let probe_min_y = o.i32()?;
+    let probe_height = o.i32()?;
+    let heightmap_count = o.u8()?;
+    anyhow::ensure!(
+        heightmap_count == 4,
+        "expected 4 heightmaps, got {heightmap_count}"
+    );
+    anyhow::ensure!(o.u32()? == cols.len(), "column count");
+
+    let settings_id = Identifier::parse(settings).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let generator = NoiseGenerator::new(&ctx.data, &settings_id, seed, &ctx.blocks, &ctx.tags)
+        .map_err(|e| anyhow::anyhow!("noise generator {settings}: {e}"))?;
+    anyhow::ensure!(
+        probe_min_y == generator.settings().min_y()
+            && probe_height == generator.settings().height(),
+        "{settings}: vertical range mismatch: vanilla ({probe_min_y}, {probe_height}) | zenith ({}, {})",
+        generator.settings().min_y(),
+        generator.settings().height()
+    );
+
+    let h = probe_height as usize;
+    for &(x, z) in &cols {
+        let van_heights = [o.i32()?, o.i32()?, o.i32()?, o.i32()?];
+        let mut van_blocks = Vec::with_capacity(h);
+        for _ in 0..h {
+            van_blocks.push(o.i32()? as u32);
+        }
+
+        let zen_heights = [
+            generator.base_height(x, z, HeightmapKind::OceanFloorWg),
+            generator.base_height(x, z, HeightmapKind::WorldSurfaceWg),
+            generator.base_height(x, z, HeightmapKind::MotionBlocking),
+            generator.base_height(x, z, HeightmapKind::MotionBlockingNoLeaves),
+        ];
+        t.check(van_heights == zen_heights, || {
+            format!(
+                "{settings} seed {seed} col ({x},{z}) heights [OF_WG, WS_WG, MB, MB_NL]: vanilla {van_heights:?} | zenith {zen_heights:?}"
+            )
+        });
+
+        let zen_blocks = generator.base_column(x, z);
+        t.check(van_blocks == zen_blocks, || {
+            match van_blocks.iter().zip(&zen_blocks).position(|(a, b)| a != b) {
+                Some(idx) => {
+                    let y = probe_min_y + (idx as i32);
+                    format!(
+                        "{settings} seed {seed} col ({x},{z}) first diff at y={y}: vanilla {} | zenith {}",
+                        describe_state(&ctx.blocks, van_blocks[idx]),
+                        describe_state(&ctx.blocks, zen_blocks[idx]),
+                    )
+                }
+                None => format!(
+                    "{settings} seed {seed} col ({x},{z}) length mismatch: vanilla {} | zenith {}",
+                    van_blocks.len(),
+                    zen_blocks.len()
+                ),
+            }
+        });
+    }
+    o.finish()?;
+    Ok(t)
+}
+
+/// `worldgen-columns`: base heights (4 heightmaps) and base column block-state IDs across all 7 settings.
+pub fn worldgen_columns(version: &str, write: bool) -> anyhow::Result<bool> {
+    let ctx = load_column_context(version)?;
+    let mut jobs: Vec<Job<'_>> = Vec::new();
+    for &(settings, min_y, height) in SETTINGS {
+        for &seed in &SEEDS[..ROUTER_SEEDS] {
+            let ctx = &ctx;
+            jobs.push(Box::new(move || {
+                column_job(ctx, version, seed, settings, min_y, height)
+            }));
+        }
+    }
+    let t = run_jobs(jobs)?;
+    report(
+        "worldgen-columns",
+        version,
+        "4 base heights + full base column block-state IDs; 7 noise settings × 3 seeds × ~60 columns",
         &t,
         write,
     )

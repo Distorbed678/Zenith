@@ -5,8 +5,11 @@
 
 use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
+use zenith_registry::{BlockStateTable, Identifier};
 use zenith_worldgen::interval::contains;
-use zenith_worldgen::{AquiferConfig, RandomState, RouterField, WorldgenData};
+use zenith_worldgen::{
+    AquiferConfig, BlockTags, HeightmapKind, NoiseGenerator, RandomState, RouterField, WorldgenData,
+};
 
 #[test]
 fn load_vanilla_jar_and_sample_all_noise_settings() {
@@ -131,6 +134,70 @@ fn load_vanilla_jar_and_sample_all_noise_settings() {
             assert!(
                 contains(temp_range, v),
                 "{settings_id} temperature volume value {v} outside {temp_range:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fill_vanilla_chunks_and_verify_heightmaps() {
+    let installs = zenith_install::discover_installs(Some("26.3"));
+    let Some(install) = installs.first() else {
+        eprintln!("NOTE: no local 26.3 install found; skipping vanilla chunk fill test");
+        return;
+    };
+    let tables_path = zenith_data::version_dir("26.3").join("tables.bin");
+    let Ok(tables) = zenith_data::Tables::load(&tables_path) else {
+        eprintln!("NOTE: no cached tables.bin found; skipping vanilla chunk fill test");
+        return;
+    };
+
+    let blocks = BlockStateTable::from_tables(&tables).expect("block state table");
+    let pack = ZipPackResources::open("vanilla", &install.client_jar, null_log());
+    let data = WorldgenData::load(&pack).expect("worldgen data");
+    let tags = BlockTags::load(&pack, &blocks).expect("block tags");
+    assert!(!tags.is_empty(), "expected vanilla block tags");
+
+    for settings_name in ["minecraft:overworld", "minecraft:nether", "minecraft:end"] {
+        let sid = Identifier::parse(settings_name).unwrap();
+        let generator = NoiseGenerator::new(&data, &sid, 12345, &blocks, &tags)
+            .unwrap_or_else(|e| panic!("NoiseGenerator::new failed for {settings_name}: {e}"));
+
+        let mut chunk = generator.fill_chunk(200, 200);
+        assert_eq!(
+            chunk.section_count(),
+            (generator.settings().height() / 16) as usize
+        );
+        assert_eq!(chunk.blocks().len(), chunk.section_count() * 4096);
+
+        // Primed final heightmaps must agree with the incrementally maintained WG heightmaps.
+        chunk.prime_final_heightmaps(generator.predicates());
+        assert_eq!(
+            chunk.ocean_floor_wg().heights(),
+            chunk
+                .heightmap(HeightmapKind::OceanFloor)
+                .unwrap()
+                .heights(),
+            "{settings_name}: OCEAN_FLOOR_WG != primed OCEAN_FLOOR"
+        );
+        assert_eq!(
+            chunk.world_surface_wg().heights(),
+            chunk
+                .heightmap(HeightmapKind::WorldSurface)
+                .unwrap()
+                .heights(),
+            "{settings_name}: WORLD_SURFACE_WG != primed WORLD_SURFACE"
+        );
+
+        // Every post-processing mark must point to a fluid block inside the chunk.
+        for mark in chunk.post_processing_marks() {
+            assert!(mark.section >= 0 && (mark.section as usize) < chunk.section_count());
+            let (lx, ly, lz) = zenith_worldgen::unpack_offset_coordinates(mark.packed);
+            let block_y = chunk.min_y() + mark.section * 16 + ly;
+            let state = chunk.get_block(lx as usize, block_y, lz as usize);
+            assert!(
+                generator.predicates().has_fluid(state),
+                "{settings_name}: post-processing mark at ({lx},{block_y},{lz}) is not a fluid"
             );
         }
     }

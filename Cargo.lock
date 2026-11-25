@@ -1743,6 +1743,7 @@ version = "0.0.1"
 dependencies = [
  "thiserror",
  "zenith-codec",
+ "zenith-data",
  "zenith-install",
  "zenith-math",
  "zenith-registry",

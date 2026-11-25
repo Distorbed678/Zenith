@@ -18,6 +18,44 @@ use crate::data::WorldgenData;
 use crate::settings::{AquiferConfig, NoiseGeneratorSettings, RouterField};
 use crate::volume::{DensityVolume, SamplerContext};
 
+/// Algorithm-erased random source produced by [`PositionalFactory::at`].
+#[derive(Debug, Clone)]
+pub enum SeededRandom {
+    /// Legacy 48-bit LCG random source.
+    Legacy(LegacyRandom),
+    /// Xoroshiro128++ random source.
+    Xoroshiro(XoroshiroRandom),
+}
+
+impl SeededRandom {
+    /// Returns a uniformly distributed integer in `0..bound`.
+    #[inline]
+    pub fn next_int_bounded(&mut self, bound: i32) -> i32 {
+        match self {
+            Self::Legacy(r) => r.next_int_bounded(bound),
+            Self::Xoroshiro(r) => r.next_int_bounded(bound),
+        }
+    }
+
+    /// Returns a single-precision float in `[0.0, 1.0)`.
+    #[inline]
+    pub fn next_float(&mut self) -> f32 {
+        match self {
+            Self::Legacy(r) => r.next_float(),
+            Self::Xoroshiro(r) => r.next_float(),
+        }
+    }
+
+    /// Returns a double-precision float in `[0.0, 1.0)`.
+    #[inline]
+    pub fn next_double(&mut self) -> f64 {
+        match self {
+            Self::Legacy(r) => r.next_double(),
+            Self::Xoroshiro(r) => r.next_double(),
+        }
+    }
+}
+
 /// Algorithm-erased positional random factory (`LEGACY` 48-bit LCG or `XOROSHIRO` xoroshiro128++).
 #[derive(Debug, Clone)]
 pub enum PositionalFactory {
@@ -33,6 +71,15 @@ impl PositionalFactory {
         match self {
             Self::Legacy(f) => Self::Legacy(f.from_hash_of(name).fork_positional()),
             Self::Xoroshiro(f) => Self::Xoroshiro(f.from_hash_of(name).fork_positional()),
+        }
+    }
+
+    /// Creates a random source for 3D block/grid coordinates `(x, y, z)`.
+    #[inline]
+    pub fn at(&self, x: i32, y: i32, z: i32) -> SeededRandom {
+        match self {
+            Self::Legacy(f) => SeededRandom::Legacy(f.at(x, y, z)),
+            Self::Xoroshiro(f) => SeededRandom::Xoroshiro(f.at(x, y, z)),
         }
     }
 }
@@ -386,6 +433,18 @@ impl RandomState {
         let mut out = vec![0.0_f32; volume.len()];
         sampler.sample_volume(&mut ctx, &mut out, volume);
         Some(out)
+    }
+
+    /// Returns the compiled sampler for router `field`.
+    #[inline]
+    pub(crate) fn router_sampler(&self, field: RouterField) -> &CompiledSampler {
+        &self.router_samplers[field.index()]
+    }
+
+    /// Returns the 6 compiled aquifer samplers if aquifers are enabled on these settings.
+    #[inline]
+    pub(crate) fn aquifer_samplers(&self) -> Option<&[CompiledSampler; AquiferConfig::COUNT]> {
+        self.aquifer_samplers.as_ref()
     }
 
     /// Samples all six climate router channels at block `(x, y, z)` via the uncached point path.

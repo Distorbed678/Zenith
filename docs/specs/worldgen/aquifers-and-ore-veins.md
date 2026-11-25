@@ -559,5 +559,5 @@ Public classes and methods a black-box parity tool can call to dump intermediate
 ---
 
 ## Parity status
-
-`golden-terrain`: not yet run.
+Aquifers (§1, §2, §4): verified through `worldgen-columns` (**2,562/2,562**: base columns include the aquifer's water,
+lava and air decisions) for all 7 noise settings × 3 seeds. Ore veins (§3) are not yet implemented.

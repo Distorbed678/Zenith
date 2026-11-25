@@ -177,11 +177,13 @@ phase = "P2"
 title = "Terrain generation"
 weight = 8
 status = "in-progress"
-suites = ["worldgen-router", "worldgen-biomes", "golden-terrain"]
+suites = ["worldgen-router", "worldgen-biomes", "worldgen-columns", "golden-terrain"]
 tasks = [
   { t = "Density functions + noise router", done = true },
   { t = "Multi-noise biome source + climate sampler", done = true },
-  { t = "Aquifers, ore veins, noodle caves", done = false },
+  { t = "Noise chunk, terrain fill, heightmaps", done = true },
+  { t = "Aquifers", done = true },
+  { t = "Ore veins (material rule), noodle caves", done = false },
   { t = "Surface rules", done = false },
   { t = "Carvers", done = false },
   { t = "Golden diff: 10k chunks × 50 seeds, all dimensions", done = false },
