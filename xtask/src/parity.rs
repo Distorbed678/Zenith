@@ -487,8 +487,10 @@ pub fn rng_streams(version: &str, write: bool) -> anyhow::Result<bool> {
     );
     let raw = fs::read(&out_file)?;
     let vanilla: Vec<u64> = raw
-        .chunks_exact(8)
-        .map(|c| u64::from_be_bytes(c.try_into().expect("8 bytes")))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|c| u64::from_be_bytes(*c))
         .collect();
     anyhow::ensure!(
         vanilla.len() == ours.len(),
