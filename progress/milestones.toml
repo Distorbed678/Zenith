@@ -153,6 +153,7 @@ tasks = [
   { t = "Text components (JSON + NBT forms), styles, translation", done = true },
   { t = "Data components (item component system)", done = true },
   { t = "Dialog codec (inline dialogs in click events)", done = false },
+  { t = "Block/item predicate codecs (can_place_on, can_break, lock)", done = false },
 ]
 
 # ───────────────────────────── P2 ─────────────────────────────

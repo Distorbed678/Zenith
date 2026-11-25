@@ -714,6 +714,15 @@ The `text-component` suite does not test tags yet: its built-in lookup has no da
     maps. Confirm whether any of those id fields are validated against a registry on decode (e.g. `minecraft:recipe`,
     `minecraft:loot_table`, `minecraft:dimension`, `minecraft:context_int_provider`,
     `minecraft:context_float_provider`) or remain unchecked resource keys; they are currently left unchecked.
+    **Answered (reader, 2026-11-25):** all of those are **plain resource keys**: any valid identifier decodes and none
+    is checked against a registry (`recipes` entries, `container_loot.loot_table`, the lodestone target's
+    `dimension`, and the provider reference form in `compostable` / `cooking_fuel` / `brewing_fuel`, whose other form
+    is an inline integer). The current implementation is correct. The predicate components differ:
+    `can_place_on` / `can_break` hold one block predicate or a non-empty list of them, and a block predicate's
+    `blocks` field is a **block holder set** (checked against `minecraft:block`); `lock` holds an item predicate whose
+    `items` field is an item holder set (checked against `minecraft:item`). Both predicate schemas (block state,
+    NBT and component matchers) belong to a future predicate spec; until then they stay raw maps, a known gap with
+    its own tracker item.
 
 ## Reader review (2026-11-25)
 Twelve rules marked **[oracle]** come from the game's bundled serialization and JSON libraries rather than its own
