@@ -640,3 +640,8 @@ means id only; "id/inline" also accepts an inline definition. *holder set* = `#t
 10. **Hashed-stack hash function** (B.5): needs its own protocol spec (hashing of every persistent value shape).
 11. **Client keybind display names** for keybind contents (key names per keyboard layout / mouse buttons) belong to the
     client input spec.
+
+## Reader review (2026-11-25)
+Twelve rules marked **[oracle]** come from the game's bundled serialization and JSON libraries rather than its own
+code. They become settled facts only once the `text-component` suite captures vanilla's actual output for them. The
+implementation reuses the JSON layer from `zenith-codec` (part A), so number, `null` and key-order handling are shared.
