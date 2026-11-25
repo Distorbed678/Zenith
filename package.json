@@ -1,0 +1,11 @@
+{
+  "name": "zenith-workspace",
+  "private": true,
+  "packageManager": "pnpm@12.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @zenith/web dev",
+    "build": "pnpm --filter @zenith/web build",
+    "check": "pnpm --filter @zenith/web check",
+    "preview": "pnpm --filter @zenith/web preview"
+  }
+}

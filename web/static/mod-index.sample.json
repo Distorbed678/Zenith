@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "status": "sample",
+  "note": "Placeholder example entries only. The signed Zenith mod index launches with milestone M25.",
+  "mods": [
+    {
+      "id": "example-daybreak-compass",
+      "name": "Example: Daybreak Compass",
+      "version": "0.1.0-sample",
+      "author": "Zenith Sample Catalog",
+      "summary": "Displays sun elevation, local biome coordinates, and chunk boundaries inside a minimal HUD strip.",
+      "tags": ["hud", "utility", "client"],
+      "permissions": ["render"],
+      "targetVersion": "26.3",
+      "example": true
+    },
+    {
+      "id": "example-pebble-cartographer",
+      "name": "Example: Pebble Cartographer",
+      "version": "0.2.0-sample",
+      "author": "Zenith Sample Catalog",
+      "summary": "Exports overhead terrain maps of visited chunks to a local folder with deterministic palette colors.",
+      "tags": ["mapping", "utility", "world"],
+      "permissions": ["filesystem", "render"],
+      "targetVersion": "26.3",
+      "example": true
+    },
+    {
+      "id": "example-torchlight-metrics",
+      "name": "Example: Torchlight Metrics",
+      "version": "0.1.4-sample",
+      "author": "Zenith Sample Catalog",
+      "summary": "Streams live server tick timing and entity counts to an opt-in local WebSocket dashboard for profiling.",
+      "tags": ["profiling", "server", "developer"],
+      "permissions": ["network", "filesystem"],
+      "targetVersion": "26.3",
+      "example": true
+    }
+  ]
+}

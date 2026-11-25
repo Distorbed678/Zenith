@@ -1,0 +1,281 @@
+/* Zenith Design System Tokens (@zenith/ui)
+ * Default theme: Night Sky. Optional Day Sky via [data-theme="day"].
+ * Respects prefers-reduced-motion and prefers-contrast: more.
+ */
+
+:root,
+:root[data-theme='night'] {
+  color-scheme: dark;
+
+  /* Core brand palette */
+  --z-sky-deep: #0b1020;
+  --z-sky-mid: #121a33;
+  --z-sky-elevated: #1b2747;
+  --z-sky-inset: #090e1c;
+
+  --z-sun-core: #ffd34d;
+  --z-sun-ray: #ffb938;
+  --z-sun-rim: #ff9e2c;
+  --z-arc: #f6e7b8;
+
+  --z-horizon-bright: #5ee0cf;
+  --z-horizon-mid: #2ea3a8;
+  --z-navy-mid: #284a72;
+  --z-navy-deep: #1f3a5e;
+
+  --z-ink: #f4f1e8;
+  --z-ink-muted: #a3b6d4;
+  --z-ink-dim: #7a93b8;
+  --z-ink-inverse: #0b1020;
+
+  /* Semantic surfaces */
+  --z-bg: var(--z-sky-deep);
+  --z-surface: var(--z-sky-mid);
+  --z-surface-elevated: var(--z-sky-elevated);
+  --z-surface-inset: var(--z-sky-inset);
+  --z-surface-header: rgba(11, 16, 32, 0.92);
+
+  /* Semantic borders & bevels (zenith overhead lighting) */
+  --z-border: #284a72;
+  --z-border-strong: #396594;
+  --z-bevel-light: #416d9e;
+  --z-bevel-dark: #070b17;
+
+  /* Interactive accents */
+  --z-accent: var(--z-sun-core);
+  --z-accent-hover: #ffe078;
+  --z-accent-edge: var(--z-sun-rim);
+  --z-accent-shadow: #9b520c;
+  --z-link: var(--z-horizon-bright);
+  --z-link-hover: #8ef0e3;
+  --z-focus: var(--z-horizon-bright);
+
+  /* Status tokens */
+  --z-status-done: #5ee0cf;
+  --z-status-done-bg: #10323a;
+  --z-status-progress: #ffd34d;
+  --z-status-progress-bg: #352910;
+  --z-status-planned: #8aa3c7;
+  --z-status-planned-bg: #17233f;
+  --z-status-warning: #ff9e2c;
+  --z-status-warning-bg: #3a230e;
+  --z-status-error: #f26d7d;
+  --z-status-error-bg: #3a1521;
+
+  /* Typography */
+  --z-font-display: 'Pixelify Sans', ui-sans-serif, system-ui, sans-serif;
+  --z-font-body: 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+  --z-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale */
+  --z-text-xs: 0.8125rem;
+  --z-text-sm: 0.9375rem;
+  --z-text-base: 1.0625rem;
+  --z-text-lg: 1.25rem;
+  --z-text-xl: 1.625rem;
+  --z-text-2xl: 2.25rem;
+  --z-text-3xl: clamp(2.5rem, 5.2vw, 3.75rem);
+
+  /* Pixel unit & spacing scale */
+  --z-px: 3px;
+  --z-space-1: 0.25rem;
+  --z-space-2: 0.5rem;
+  --z-space-3: 0.75rem;
+  --z-space-4: 1rem;
+  --z-space-5: 1.5rem;
+  --z-space-6: 2rem;
+  --z-space-7: 3rem;
+  --z-space-8: 4.5rem;
+
+  /* Layout widths */
+  --z-container: 72rem;
+  --z-prose: 66ch;
+
+  /* Hard pixel shadows (zero blur) */
+  --z-shadow-frame: 0 var(--z-px) 0 0 var(--z-bevel-dark),
+    0 calc(var(--z-px) * 2) 0 0 rgba(5, 8, 18, 0.55);
+  --z-shadow-button: 0 var(--z-px) 0 0 var(--z-bevel-dark);
+  --z-shadow-popover: var(--z-px) var(--z-px) 0 0 var(--z-bevel-dark),
+    calc(var(--z-px) * 2) calc(var(--z-px) * 2) 0 0 rgba(5, 8, 18, 0.5);
+
+  /* Z-index layers */
+  --z-layer-sky: 0;
+  --z-layer-content: 10;
+  --z-layer-sticky: 30;
+  --z-layer-header: 50;
+  --z-layer-popover: 70;
+  --z-layer-modal: 90;
+
+  /* Motion durations (pixel-stepped transitions) */
+  --z-dur-press: 60ms;
+  --z-dur-ui: 120ms;
+  --z-dur-hero: 1400ms;
+  --z-ease-step: steps(4, end);
+}
+
+:root[data-theme='day'] {
+  color-scheme: light;
+
+  --z-sky-deep: #d8ecf4;
+  --z-sky-mid: #eaf5fa;
+  --z-sky-elevated: #f5fbfd;
+  --z-sky-inset: #c7e1ec;
+
+  --z-ink: #101b33;
+  --z-ink-muted: #2d476b;
+  --z-ink-dim: #466389;
+  --z-ink-inverse: #f4f1e8;
+
+  --z-bg: var(--z-sky-deep);
+  --z-surface: var(--z-sky-mid);
+  --z-surface-elevated: var(--z-sky-elevated);
+  --z-surface-inset: var(--z-sky-inset);
+  --z-surface-header: rgba(216, 236, 244, 0.94);
+
+  --z-border: #284a72;
+  --z-border-strong: #1f3a5e;
+  --z-bevel-light: #ffffff;
+  --z-bevel-dark: #1f3a5e;
+
+  --z-accent: #ffd34d;
+  --z-accent-hover: #ffe078;
+  --z-accent-edge: #d97a00;
+  --z-accent-shadow: #8c4a00;
+  --z-link: #126b70;
+  --z-link-hover: #0b4f53;
+  --z-focus: #126b70;
+
+  --z-status-done: #0f6b67;
+  --z-status-done-bg: #c6efe9;
+  --z-status-progress: #8d4e00;
+  --z-status-progress-bg: #fff0c2;
+  --z-status-planned: #355072;
+  --z-status-planned-bg: #d4e4f0;
+  --z-status-warning: #9a4a00;
+  --z-status-warning-bg: #ffe5c4;
+  --z-status-error: #a81e34;
+  --z-status-error-bg: #ffd9df;
+
+  --z-shadow-frame: 0 var(--z-px) 0 0 rgba(31, 58, 94, 0.45);
+  --z-shadow-button: 0 var(--z-px) 0 0 var(--z-navy-deep);
+  --z-shadow-popover: var(--z-px) var(--z-px) 0 0 rgba(31, 58, 94, 0.45);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --z-dur-press: 0ms;
+    --z-dur-ui: 0ms;
+    --z-dur-hero: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High contrast preference */
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme='night'] {
+    --z-bg: #050812;
+    --z-surface: #0c1328;
+    --z-surface-elevated: #121c38;
+    --z-ink: #ffffff;
+    --z-ink-muted: #d8e5f8;
+    --z-ink-dim: #bfd2ee;
+    --z-border: #6d9ed4;
+    --z-border-strong: #94c2f2;
+    --z-bevel-light: #94c2f2;
+    --z-link: #7cf7e8;
+    --z-focus: #ffd34d;
+  }
+
+  :root[data-theme='day'] {
+    --z-bg: #ffffff;
+    --z-surface: #f2f8fb;
+    --z-surface-elevated: #ffffff;
+    --z-ink: #000000;
+    --z-ink-muted: #162640;
+    --z-ink-dim: #1f3a5e;
+    --z-border: #101b33;
+    --z-border-strong: #000000;
+    --z-link: #074b50;
+  }
+}
+
+/* Shared base resets and helpers */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: var(--z-bg);
+  color: var(--z-ink);
+  font-family: var(--z-font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--z-bg);
+  color: var(--z-ink);
+  font-size: var(--z-text-base);
+  overflow-x: clip;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--z-font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--z-ink);
+  margin: 0;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+.z-pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.z-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Consistent visible keyboard focus ring */
+:focus-visible {
+  outline: var(--z-px) solid var(--z-focus);
+  outline-offset: var(--z-px);
+}
+
+.z-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

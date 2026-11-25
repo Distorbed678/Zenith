@@ -1,0 +1,203 @@
+/* Prose styling for rendered repository Markdown (/docs and /changelog).
+ * Line length strictly < 80 characters (max-width: var(--z-prose) = 66ch).
+ */
+
+.z-prose {
+  max-width: var(--z-prose);
+  color: var(--z-ink);
+  font-family: var(--z-font-body);
+  font-size: var(--z-text-base);
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+
+.z-prose > :first-child {
+  margin-top: 0;
+}
+
+.z-prose h1 {
+  font-size: var(--z-text-2xl);
+  line-height: 1.15;
+  margin-bottom: var(--z-space-4);
+  padding-bottom: var(--z-space-3);
+  border-bottom: var(--z-px) solid var(--z-border);
+}
+
+.z-prose h2 {
+  font-size: var(--z-text-xl);
+  line-height: 1.25;
+  margin-top: var(--z-space-7);
+  margin-bottom: var(--z-space-3);
+  scroll-margin-top: 5.5rem;
+}
+
+.z-prose h3 {
+  font-size: var(--z-text-lg);
+  line-height: 1.35;
+  margin-top: var(--z-space-5);
+  margin-bottom: var(--z-space-2);
+  color: var(--z-horizon-bright);
+  scroll-margin-top: 5.5rem;
+}
+
+:root[data-theme='day'] .z-prose h3 {
+  color: var(--z-link);
+}
+
+.z-prose h4 {
+  font-size: var(--z-text-base);
+  margin-top: var(--z-space-4);
+  margin-bottom: var(--z-space-2);
+}
+
+.z-prose p {
+  margin: 0 0 var(--z-space-4);
+}
+
+.z-prose a {
+  color: var(--z-link);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.z-prose a:hover {
+  color: var(--z-link-hover);
+}
+
+.z-prose ul,
+.z-prose ol {
+  margin: 0 0 var(--z-space-4);
+  padding-left: 1.5rem;
+}
+
+.z-prose li {
+  margin-bottom: 0.45rem;
+}
+
+.z-prose li > ul,
+.z-prose li > ol {
+  margin-top: 0.45rem;
+  margin-bottom: 0;
+}
+
+.z-prose hr {
+  border: 0;
+  height: var(--z-px);
+  background-color: var(--z-border);
+  margin: var(--z-space-6) 0;
+}
+
+.z-prose blockquote {
+  margin: var(--z-space-5) 0;
+  padding: var(--z-space-3) var(--z-space-4);
+  background-color: var(--z-surface);
+  border-left: calc(var(--z-px) * 2) solid var(--z-sun-core);
+  color: var(--z-ink-muted);
+}
+
+.z-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Inline code */
+.z-prose :not(pre) > code {
+  font-family: var(--z-font-mono);
+  font-size: 0.88em;
+  padding: 0.1rem 0.35rem;
+  background-color: var(--z-surface-elevated);
+  border: 1px solid var(--z-border);
+  color: var(--z-arc);
+}
+
+.z-prose a > code {
+  color: var(--z-link);
+  border-color: var(--z-horizon-mid);
+  white-space: nowrap;
+}
+
+.z-prose a:hover > code {
+  color: var(--z-link-hover);
+  border-color: var(--z-horizon-bright);
+}
+
+:root[data-theme='day'] .z-prose :not(pre) > code {
+  color: var(--z-navy-deep);
+}
+
+/* Shiki syntax-highlighted code blocks in recessed pixel wells */
+.z-prose pre.shiki {
+  margin: var(--z-space-5) 0;
+  padding: var(--z-space-4);
+  overflow-x: auto;
+  background-color: var(--z-surface-inset) !important;
+  border: var(--z-px) solid var(--z-border);
+  box-shadow: inset 0 var(--z-px) 0 0 var(--z-bevel-dark);
+  font-family: var(--z-font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.z-prose pre.shiki code {
+  font-family: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.z-prose pre.shiki span {
+  color: var(--shiki-dark);
+}
+
+:root[data-theme='day'] .z-prose pre.shiki {
+  background-color: #f3f9fc !important;
+}
+
+:root[data-theme='day'] .z-prose pre.shiki span {
+  color: var(--shiki-light);
+}
+
+/* GFM Tables */
+.z-prose .z-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  margin: var(--z-space-5) 0;
+  border: var(--z-px) solid var(--z-border);
+  background-color: var(--z-surface);
+}
+
+.z-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--z-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.z-prose th,
+.z-prose td {
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 2px solid var(--z-navy-deep);
+  vertical-align: top;
+}
+
+.z-prose thead th {
+  font-family: var(--z-font-display);
+  font-weight: 600;
+  color: var(--z-ink);
+  background-color: var(--z-surface-elevated);
+  border-bottom: var(--z-px) solid var(--z-border-strong);
+  white-space: nowrap;
+}
+
+.z-prose tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.z-prose tbody tr:nth-child(even) {
+  background-color: rgba(27, 39, 71, 0.35);
+}
+
+:root[data-theme='day'] .z-prose tbody tr:nth-child(even) {
+  background-color: rgba(40, 74, 114, 0.06);
+}
