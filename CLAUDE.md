@@ -13,10 +13,12 @@ The full plan lives in `docs/plan/` (start at `docs/plan/00-OVERVIEW.md`). Every
    (multiSelect for suggestion batches), never plain chat. After every round, append the questions, the options and the
    answers to `docs/decisions/USER-ANSWERS.md`. Re-read that file first, so nothing already settled is asked again.
    **No gameplay suggestions, ever.**
-2. **Subagents.** Use subagents when they help, with the right model for the task. In T3 Code, Gemini subagents can be
-   started with `delegate_task` (provider `antigravity`, model **`gemini-4-neon`**). The owner allows **Gemini 4 Neon only**
-   (never another Gemini model). The owner considers it as capable as Opus 5.5, so use it to save Claude usage on large,
-   self-contained work. Keep architecture and cross-cutting decisions in the main thread.
+2. **Subagents.** Use subagents when they help, with the right model for the task. **As of 2026-11-25 the owner said
+   Antigravity (Gemini) usage is low, so use Claude subagents** (T3 `delegate_task` with provider `claudeAgent` for
+   background work; pick the model per task: Opus 5.5 for clean-room *reading*/spec writing and intricate
+   implementations, Sonnet 5.5 for well-specified implementation, tests and front-end). Gemini, when its quota is
+   back and the owner says so, is limited to **Gemini 4 Neon** only. Keep architecture and cross-cutting decisions in
+   the main thread.
 3. **Cadence: fully autonomous.** Work milestone after milestone (`docs/plan/11-ROADMAP.md`). Stop only when blocked on a
    decision that belongs to the owner. Update the tracker (`progress/milestones.toml` → `cargo xtask progress`) whenever a
    milestone moves.

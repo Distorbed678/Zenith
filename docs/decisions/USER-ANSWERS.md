@@ -127,3 +127,4 @@ Answers are quoted or paraphrased faithfully. Where an answer changed an earlier
 ### Clean-room working split (applied from M1 on)
 - **Reader** (main thread): reads local reference code when needed, writes specs in `docs/specs/` in its own words.
 - **Implementer** (delegate or separate session): implements only from specs + public docs. It never reads `~/.cache/zenith/reference/`.
+| S.6 | (2026-11-25) "Antigravity usage is low so use Claude for subagents." Overrides S.3's Gemini preference until the owner says otherwise. Model per task: Opus 5.5 for readers/spec writing and intricate implementation, Sonnet 5.5 for well-specified implementation/tests/front-end. | CLAUDE.md rule 2 + memory |
