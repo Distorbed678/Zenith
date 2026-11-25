@@ -55,6 +55,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Compare zenith-math's noise generators with vanilla's at fixed sample points.
+    NoiseSamples {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Compare zenith-math's random sources with vanilla's over a fixed script of operations.
     RngStreams {
         #[arg(long, default_value = "26.3")]
@@ -123,6 +130,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::NoiseSamples { version, write },
+        } => parity::noise_samples(&version, write),
         Cmd::Parity {
             cmd:
                 ParityCmd::SnbtFormat {

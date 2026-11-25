@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T01:01:13Z",
+  "generatedAt": "2026-11-25T01:25:20Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 5.9,
-    "parityPercent": 12.9,
+    "percent": 6.4,
+    "parityPercent": 16.1,
     "milestonesDone": 2,
     "milestonesTotal": 33,
-    "suitesPassing": 4,
+    "suitesPassing": 5,
     "suitesTotal": 31
   },
   "phases": [
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 1.8,
+      "percent": 3.1,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -410,8 +410,8 @@
       "title": "Math, RNG & noise primitives",
       "status": "in-progress",
       "weight": 2.0,
-      "percent": 50.0,
-      "tasksDone": 2,
+      "percent": 87.5,
+      "tasksDone": 3,
       "tasksTotal": 4,
       "tasks": [
         {
@@ -424,7 +424,7 @@
         },
         {
           "title": "Improved/Perlin, Simplex, Blended and Normal noise",
-          "done": false
+          "done": true
         },
         {
           "title": "Seed hashing identical to vanilla",
@@ -441,10 +441,10 @@
         },
         {
           "id": "noise-samples",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 48300,
+          "total": 48300,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1352,8 +1352,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 5.9,
-      "parityPercent": 12.9
+      "percent": 6.4,
+      "parityPercent": 16.1
     }
   ]
 }

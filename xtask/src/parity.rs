@@ -527,3 +527,219 @@ pub fn rng_streams(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     Ok(passed == total)
 }
+
+// ── noise-samples ────────────────────────────────────────────────────────────
+
+use zenith_math::noise::{
+    NormalNoise, NormalNoiseParameters, PerlinNoise, SimplexNoise, SmearedPerlinNoise,
+    build_legacy_fbm, build_smeared_fbm,
+};
+
+const NOISE_SEEDS: [i64; 5] = [0, 1, 42, -7_046_029_254_386_353_131, 1_234_567_890_123];
+const NOISE_SMEARS: [f64; 3] = [80.0, 8.0, 1.0];
+const NOISE_PARITY: [(i32, &[f64]); 4] = [
+    (-7, &[1.0, 1.0]),
+    (-10, &[1.5, 0.0, 1.0, 0.0, 0.0, 0.0]),
+    (-4, &[1.0]),
+    (-3, &[1.0, 1.0, 0.0, 1.0, 1.0]),
+];
+const NOISE_FBM: [(i32, &[f64]); 2] = [(-7, &[1.0, 1.0]), (-3, &[1.0, 0.0, 0.5])];
+const NOISE_SMEARED_FBM: [i32; 2] = [-15, -7];
+
+/// Identical to `NoiseSamples.points()` in the oracle tool.
+fn noise_points() -> Vec<[f64; 3]> {
+    let mut v = vec![
+        [0.0, 0.0, 0.0],
+        [0.5, 0.25, -0.75],
+        [1.0, 2.0, 3.0],
+        [-1.5, 64.0, 1000.25],
+        [12345.678, -63.9, 98765.4321],
+        [16_777_215.5, 0.0, -16_777_215.5],
+        [16_777_216.0, 1.0, -16_777_216.0],
+        [3.0e7, 100.0, -3.0e7],
+        [1e-9, 1e-9, 1e-9],
+        [-0.0, 0.0, -0.0],
+    ];
+    let mut s: i64 = 0x2545_F491_4F6C_DD1D;
+    for _ in 0..200 {
+        let mut p = [0.0; 3];
+        for c in &mut p {
+            s = s
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let u = ((s as u64) >> 11) as f64 * 2f64.powi(-53);
+            *c = (u * 2.0 - 1.0) * 1.0e6;
+        }
+        v.push(p);
+    }
+    v
+}
+
+/// Sentinel written for every sample of a noise whose construction was rejected.
+const REJECTED: u64 = u64::MAX;
+
+fn fbits(v: f32) -> u64 {
+    i64::from(v.to_bits() as i32) as u64
+}
+
+/// The shared case list for one (generator kind, seed). Must stay identical to `NoiseSamples.main`.
+fn noise_cases<R: RandomSource>(
+    mk: &dyn Fn(i64) -> R,
+    seed: i64,
+    pts: &[[f64; 3]],
+    out: &mut Vec<(u64, &'static str)>,
+) -> anyhow::Result<()> {
+    let pn = PerlinNoise::new(&mut mk(seed));
+    for p in pts {
+        out.push((fbits(pn.sample(p[0], p[1], p[2])), "perlin 3d"));
+        out.push((fbits(pn.sample_2d(p[0], p[2])), "perlin 2d"));
+        let mut d = [0f32; 3];
+        out.push((
+            fbits(pn.sample_with_derivative(p[0], p[1], p[2], &mut d)),
+            "perlin derivative value",
+        ));
+        for v in d {
+            out.push((fbits(v), "perlin derivative"));
+        }
+    }
+    let sn = SimplexNoise::new(&mut mk(seed));
+    for p in pts {
+        out.push((fbits(sn.sample_2d(p[0], p[2])), "simplex 2d"));
+        out.push((fbits(sn.sample(p[0], p[1], p[2])), "simplex 3d"));
+    }
+    for smear in NOISE_SMEARS {
+        let mn = SmearedPerlinNoise::new(&mut mk(seed), smear);
+        for p in pts {
+            out.push((fbits(mn.sample(p[0], p[1], p[2])), "smeared perlin"));
+        }
+    }
+    // A construction that fails writes REJECTED for each of its samples (vanilla does the same on an exception),
+    // so "both reject" counts as agreement and a one-sided rejection shows up as a divergence.
+    let val = |v: Option<f32>| v.map_or(REJECTED, fbits);
+    for (first, amps) in NOISE_PARITY {
+        let std = NormalNoise::from_parity(&mut mk(seed), first, amps.to_vec()).ok();
+        let nether = NormalNoiseParameters::parity(first, amps.to_vec())
+            .and_then(|params| NormalNoise::new_legacy_nether(&mut mk(seed), params))
+            .ok();
+        for p in pts {
+            out.push((
+                val(std.as_ref().map(|n| n.sample(p[0], p[1], p[2]))),
+                "normal noise",
+            ));
+            out.push((
+                val(nether.as_ref().map(|n| n.sample(p[0], p[1], p[2]))),
+                "normal noise (legacy nether)",
+            ));
+        }
+    }
+    for (first, amps) in NOISE_FBM {
+        let stack = build_legacy_fbm(&mut mk(seed), first, amps).ok();
+        for p in pts {
+            out.push((
+                val(stack.as_ref().map(|n| n.sample(p[0], p[1], p[2]))),
+                "legacy fbm",
+            ));
+        }
+    }
+    for first in NOISE_SMEARED_FBM {
+        let stack = build_smeared_fbm(&mut mk(seed), first, 80.0, 1.0).ok();
+        for p in pts {
+            out.push((
+                val(stack.as_ref().map(|n| n.sample(p[0], p[1], p[2]))),
+                "smeared fbm",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `noise-samples`: zenith-math's noises must produce bit-identical floats to vanilla's at the shared points.
+pub fn noise_samples(version: &str, write: bool) -> anyhow::Result<bool> {
+    let pts = noise_points();
+    let mut ours: Vec<(u64, &'static str)> = Vec::new();
+    let mut tags: Vec<(usize, &'static str, i64)> = Vec::new();
+    for legacy in [false, true] {
+        for seed in NOISE_SEEDS {
+            tags.push((
+                ours.len(),
+                if legacy { "legacy" } else { "xoroshiro" },
+                seed,
+            ));
+            if legacy {
+                noise_cases(&|s| LegacyRandom::new(s), seed, &pts, &mut ours)?;
+            } else {
+                noise_cases(&|s| XoroshiroRandom::new(s), seed, &pts, &mut ours)?;
+            }
+        }
+    }
+
+    let (install, java) = crate::oracle::install_and_java(version)?;
+    let agent = crate::oracle::build(version)?;
+    let mut cp = zenith_install::libraries::game_classpath(&install)?;
+    cp.push(agent);
+    let dir = zenith_install::cache_dir().join("parity/noise-samples");
+    fs::create_dir_all(&dir)?;
+    let out_file = dir.join("vanilla.bin");
+    let out = std::process::Command::new(&java.java)
+        .arg("-cp")
+        .arg(zenith_install::libraries::join_classpath(&cp))
+        .arg("dev.zenith.oracle.NoiseSamples")
+        .arg(&out_file)
+        .output()
+        .context("run vanilla noise samples")?;
+    anyhow::ensure!(
+        out.status.success(),
+        "vanilla noise samples failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let raw = fs::read(&out_file)?;
+    let vanilla: Vec<u64> = raw
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|c| u64::from_be_bytes(*c))
+        .collect();
+    anyhow::ensure!(
+        vanilla.len() == ours.len(),
+        "value count differs: vanilla {} vs zenith {}",
+        vanilla.len(),
+        ours.len()
+    );
+
+    let mut passed = 0u64;
+    let mut by_label: std::collections::BTreeMap<&str, (u64, u64)> =
+        std::collections::BTreeMap::new();
+    let mut failures: Vec<String> = Vec::new();
+    for (i, ((z, label), v)) in ours.iter().zip(&vanilla).enumerate() {
+        let e = by_label.entry(label).or_default();
+        e.1 += 1;
+        if z == v {
+            passed += 1;
+            e.0 += 1;
+        } else if failures.len() < 10 {
+            let (_, kind, seed) = tags
+                .iter()
+                .rev()
+                .find(|t| t.0 <= i)
+                .copied()
+                .unwrap_or((0, "?", 0));
+            let (fv, fz) = (f32::from_bits(*v as u32), f32::from_bits(*z as u32));
+            failures.push(format!(
+                "#{i} {kind} seed {seed} {label}: vanilla {fv:e} vs zenith {fz:e}"
+            ));
+        }
+    }
+    let total = ours.len() as u64;
+    println!("noise-samples {version}: {passed}/{total} floats bit-identical to vanilla");
+    for (label, (p, t)) in &by_label {
+        println!("  {label:<32} {p}/{t}");
+    }
+    for f in &failures {
+        println!("  FAIL {f}");
+    }
+    if write {
+        SuiteResult::new("noise-samples", version, passed, total)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(passed == total)
+}

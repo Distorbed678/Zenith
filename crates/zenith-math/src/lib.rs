@@ -38,8 +38,14 @@
 //! ```
 
 pub mod java;
+pub mod noise;
 pub mod random;
 
+pub use noise::{
+    BlendedNoise, BlendedNoiseParameters, GradientNoiseState, Interval, Noise, NoiseError,
+    NormalNoise, NormalNoiseParameters, NormalizationMode, OctaveLayer, OctaveLayerNoise,
+    OctaveStack, OctaveStackBuilder, PerlinNoise, SimplexNoise, SmearedPerlinNoise, VolumeGrid,
+};
 pub use random::{
     BitRandomSource, LegacyPositionalRandomFactory, LegacyRandom, PositionalRandomFactory,
     RandomSource, Seed128, XoroshiroPositionalRandomFactory, XoroshiroRandom,

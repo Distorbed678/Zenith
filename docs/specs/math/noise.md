@@ -560,3 +560,11 @@ Every item below can cause bit-level divergence if implemented naively (all to b
 
 1. **Per-platform `Math.sin` parity**: Verify via oracle `noise-samples` whether HotSpot's `Math.sin` intrinsic diverges by 1 ULP from fdlibm `sin` on any CI architecture for the `NoiseUtils` extreme-bias helper, and record any per-platform quirk if found.
 2. **Non-positive Y-smear step size ($q_y \le 0$) in smeared Perlin**: Vanilla callers only pass strictly positive $q_y$ ($684.412 \cdot s_y \cdot m_s \cdot 2^{-k} > 0$). Confirm whether any data-pack or test exercises $q_y = 0.0$ (where $L / 0.0$ saturates $\lfloor \cdot \rfloor_{32}$ to $2^{31}-1$ or $0$ before multiplying by $0.0$).
+3. **`NormalNoise` range queried by downstream density functions (`NormalNoiseParameters::range()` vs `OctaveStack::range()`)**: `NormalNoiseParameters` precomputes `[-r, r]` with $r = \text{f32}((T \cdot \frac{1}{3}) \cdot 6.0)$ (Section 7 step 5), whereas its instantiated `OctaveStack` computes a wider layer-summed interval $\sum ([-2, 2] \times [w_k, w_k])$ (Section 5). Confirm which interval downstream density functions (`minecraft:noise`, `minecraft:shifted_noise`, etc.) report as their min/max bounds; both are exposed (`NormalNoiseParameters::range()` / `NormalNoise::parameter_range()` and `OctaveStack::range()` / `NormalNoise::range()`).
+
+## Parity status (2026-11-25)
+`noise-samples`: **48,300/48,300** floats bit-identical to vanilla 26.3: Perlin (3D, 2D, value + derivatives),
+simplex (2D, 3D), smeared Perlin (3 smear scales), normal noise (4 parity configurations; standard and legacy-Nether
+instantiation, including matching rejection of a positive legacy octave), legacy FBM and smeared FBM stacks. Each was
+built from both random generators with 5 seeds and sampled at 210 points, including the 2²⁴ wrap boundary and ±0. The
+top-level blended-noise sampler (selector + limit lerp) is verified with the density functions in M7.

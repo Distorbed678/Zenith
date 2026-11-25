@@ -165,7 +165,7 @@ suites = ["rng-streams", "noise-samples"]
 tasks = [
   { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = true },
   { t = "Java-exact float/double math helpers (sin table, floor, lerp…)", done = false },
-  { t = "Improved/Perlin, Simplex, Blended and Normal noise", done = false },
+  { t = "Improved/Perlin, Simplex, Blended and Normal noise", done = true },
   { t = "Seed hashing identical to vanilla", done = true },
 ]
 
