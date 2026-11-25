@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T03:52:06Z",
+  "generatedAt": "2026-11-25T04:26:08Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 9.6,
+    "percent": 10.2,
     "parityPercent": 25.0,
     "milestonesDone": 3,
     "milestonesTotal": 33,
@@ -28,7 +28,7 @@
       "id": "P1",
       "title": "Core data",
       "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
-      "percent": 58.5,
+      "percent": 64.4,
       "weight": 17.0,
       "milestones": [
         "M1",
@@ -360,19 +360,19 @@
       "id": "M5",
       "phase": "P1",
       "title": "Codecs, data packs & text components",
-      "status": "planned",
+      "status": "in-progress",
       "weight": 5.0,
-      "percent": 0.0,
-      "tasksDone": 0,
+      "percent": 20.0,
+      "tasksDone": 2,
       "tasksTotal": 5,
       "tasks": [
         {
           "title": "Codec framework (decode/encode, lenient/strict, error messages)",
-          "done": false
+          "done": true
         },
         {
           "title": "Data pack discovery, overlays, pack.mcmeta version ranges",
-          "done": false
+          "done": true
         },
         {
           "title": "All vanilla data registries parse from the user's jar",
@@ -1359,7 +1359,7 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 9.6,
+      "percent": 10.2,
       "parityPercent": 25.0
     }
   ]

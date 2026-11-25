@@ -826,6 +826,41 @@ The exact message text is not part of parity; the content and grouping are.
 7. **Feature-flag partial in other consumers:** `features` in `pack.mcmeta` demands success, and the world config is
    lenient. Other places that decode flag lists (for example dimension or world-preset data) may accept the partial
    set; this needs checking per consumer when those specs are written.
+8. **(implementer) Literal case in JSON keywords:** the spec table says nothing about `TRUE`, `True` or `nULL`. The
+   implementation accepts only the exact lowercase literals `true`, `false` and `null` (conservative). Check with a
+   `json-strict` fixture whether the game's strict reader also accepts other letter cases.
+9. **(implementer) Lone surrogate escapes:** `"\ud83d"` (an unpaired surrogate) is a valid JSON string for the game's
+   reader, and the string then carries a lone UTF-16 unit. Rust strings cannot, so the implementation substitutes
+   U+FFFD. Identifiers and pack ids never contain surrogates, so only free-text fields could differ.
+10. **(implementer) Exact exponent limit:** the integer-read "hard failure" uses `|exponent| > 10000` on the exponent
+    **as written in the text** (so `1e10000` still reads as `0`, `1e10001` fails). Spec §7.2 says "about ±10000"; the
+    exact bound and whether it applies to the exponent or to the resulting decimal scale needs a fixture (see 6).
+11. **(implementer) Nesting limit:** the game's JSON reader has no explicit depth limit; the implementation reports a
+    parse error beyond 1024 nested levels instead of overflowing its own stack (a crash, not replicated).
+12. **(implementer) `null` as a section value:** `pack.mcmeta` sections are read when the **key is present**, so
+    `"features": null`, `"overlays": null` or `"pack": null` is treated as a present, invalid section (pack dropped for
+    `pack`/`features`/`overlays`; ignored for `filter`) rather than as an absent key. The spec only states this for
+    record fields. Verify with an oracle fixture.
+13. **(implementer) Text-component validation depth:** §3.3 describes only the broad shapes. The implementation
+    accepts strings, non-empty arrays and objects with a content key (`text`, `translate`, `score`, `selector`,
+    `keybind`, `nbt`, `object`, or an explicit `type`), checks `extra`, `color` (the 16 names or `#RRGGBB`), the five
+    style booleans, `font` and `insertion`, and does not validate click/hover events or `shadow_color`. A fixture
+    corpus for descriptions would pin the remaining rules.
+14. **(implementer) `allowed_symlinks.txt` format and relative targets:** the spec only says the list defaults to
+    "nothing allowed". The implementation reads one rule per line (`#` comments), each optionally typed `[prefix]`
+    (default), `[regex]` or `[glob]`, and matches it against the **canonical target** of the symlink. For allowed
+    symlinked entries it continues with the canonical target (the working behavior), not with a possibly
+    CWD-relative path (Open question 2).
+15. **(implementer) Overlay directory `.` for zip packs:** `.` resolves to the pack root for folder packs. For zip packs
+    the overlay prefix is the literal entry-name prefix `./`, which matches nothing in a normal archive, so a `.`
+    overlay contributes nothing there. Confirm with an oracle fixture whether the game normalizes it.
+16. **(implementer) `initial-disabled-packs` default:** it is "empty", and splitting an empty value gives `[""]` like
+    `initial-enabled-packs`. The empty id never matches a pack, so this is not observable in the stored lists, but the
+    exact in-memory value differs from `[]`.
+17. **(implementer) Path-segment checks only on direct lookups:** folder packs validate path segments on direct
+    lookups only. Listing directories are checked for `.`/`..`/empty segments by the implementation (a listing with
+    `..` would escape the pack folder); the spec says nothing about this because the game's callers never pass such
+    directories.
 
 ## Reader review (2026-11-25)
 Facts in this spec were checked by the reader with local experiments that ran the game's own bundled JSON and codec

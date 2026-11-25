@@ -144,11 +144,11 @@ id = "M5"
 phase = "P1"
 title = "Codecs, data packs & text components"
 weight = 5
-status = "planned"
+status = "in-progress"
 suites = ["datapack-load", "text-component"]
 tasks = [
-  { t = "Codec framework (decode/encode, lenient/strict, error messages)", done = false },
-  { t = "Data pack discovery, overlays, pack.mcmeta version ranges", done = false },
+  { t = "Codec framework (decode/encode, lenient/strict, error messages)", done = true },
+  { t = "Data pack discovery, overlays, pack.mcmeta version ranges", done = true },
   { t = "All vanilla data registries parse from the user's jar", done = false },
   { t = "Text components (JSON + NBT forms), styles, translation", done = false },
   { t = "Data components (item component system)", done = false },
