@@ -58,15 +58,27 @@ final class ChunkDump {
                 if (chunk == null) {
                     throw new IllegalStateException("no chunk at " + dimension + " " + cx + "," + cz);
                 }
-                writeChunk(o, chunk, dimension, cx, cz, statusName, blockId);
+                writeChunk(o, chunk, dimension, cx, cz, statusName, blockId, structureIds(level));
                 count++;
             }
         }
         System.out.println("[zenith-oracle] dumped " + count + " chunks to " + out);
     }
 
+    /** Registry-id lookups for structures and structure piece types. */
+    private record Ids(Object structures, Object pieceTypes, Method structureKey, Method pieceKey) {}
+
+    private static Ids structureIds(Object level) throws Exception {
+        Object access = call(level, "registryAccess");
+        Class<?> keyClass = Class.forName("net.minecraft.resources.ResourceKey");
+        Object structureKey = Class.forName("net.minecraft.core.registries.Registries").getField("STRUCTURE").get(null);
+        Object structures = findMethod(access, "lookupOrThrow", keyClass).invoke(access, structureKey);
+        Object pieces = Class.forName("net.minecraft.core.registries.BuiltInRegistries").getField("STRUCTURE_PIECE").get(null);
+        return new Ids(structures, pieces, findMethod(structures, "getKey", Object.class), findMethod(pieces, "getKey", Object.class));
+    }
+
     private static void writeChunk(DataOutputStream o, Object chunk, String dimension, int cx, int cz, String requested,
-            Method blockId) throws Exception {
+            Method blockId, Ids ids) throws Exception {
         int minY = (Integer) call(chunk, "getMinY");
         int height = (Integer) call(chunk, "getHeight");
         Object reached = call(call(chunk, "getPersistedStatus"), "getName");
@@ -161,6 +173,56 @@ final class ChunkDump {
         // Scheduled tick counts held by the chunk (block, fluid); -1 if the container cannot report a count.
         o.writeInt(tickCount(chunk, "getBlockTicks"));
         o.writeInt(tickCount(chunk, "getFluidTicks"));
+
+        // Structure starts held by this chunk, sorted by structure id: id, start chunk, references, validity, bounding
+        // box, then every piece (type id, box, orientation name or "", generation depth) in list order.
+        Map<String, Object> starts = new java.util.TreeMap<>();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) call(chunk, "getAllStarts")).entrySet()) {
+            starts.put(String.valueOf(ids.structureKey().invoke(ids.structures(), e.getKey())), e.getValue());
+        }
+        o.writeInt(starts.size());
+        for (Map.Entry<String, Object> e : starts.entrySet()) {
+            Object start = e.getValue();
+            writeStr(o, e.getKey());
+            Object pos = call(start, "getChunkPos");
+            o.writeInt((Integer) call(pos, "x"));
+            o.writeInt((Integer) call(pos, "z"));
+            o.writeInt((Integer) call(start, "getReferences"));
+            o.writeByte((Boolean) call(start, "isValid") ? 1 : 0);
+            writeBox(o, call(start, "getBoundingBox"));
+            List<?> pieceList = (List<?>) call(start, "getPieces");
+            o.writeInt(pieceList.size());
+            for (Object piece : pieceList) {
+                writeStr(o, String.valueOf(ids.pieceKey().invoke(ids.pieceTypes(), call(piece, "getType"))));
+                writeBox(o, call(piece, "getBoundingBox"));
+                Object facing = call(piece, "getOrientation");
+                writeStr(o, facing == null ? "" : String.valueOf(call(facing, "getSerializedName")));
+                o.writeInt((Integer) call(piece, "getGenDepth"));
+            }
+        }
+
+        // Structure references, sorted by structure id, each with its packed start-chunk positions sorted.
+        Map<String, long[]> refs = new java.util.TreeMap<>();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) call(chunk, "getAllReferences")).entrySet()) {
+            Object set = e.getValue();
+            long[] packed = (long[]) findMethod(set, "toLongArray").invoke(set);
+            java.util.Arrays.sort(packed);
+            refs.put(String.valueOf(ids.structureKey().invoke(ids.structures(), e.getKey())), packed);
+        }
+        o.writeInt(refs.size());
+        for (Map.Entry<String, long[]> e : refs.entrySet()) {
+            writeStr(o, e.getKey());
+            o.writeInt(e.getValue().length);
+            for (long l : e.getValue()) {
+                o.writeLong(l);
+            }
+        }
+    }
+
+    private static void writeBox(DataOutputStream o, Object box) throws Exception {
+        for (String m : new String[] {"minX", "minY", "minZ", "maxX", "maxY", "maxZ"}) {
+            o.writeInt((Integer) call(box, m));
+        }
     }
 
     private static int tickCount(Object chunk, String getter) {

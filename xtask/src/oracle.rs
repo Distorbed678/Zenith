@@ -431,6 +431,33 @@ pub struct DumpedChunk {
     pub post_processing: Vec<(i32, u16)>,
     pub block_ticks: i32,
     pub fluid_ticks: i32,
+    /// Structure starts held by the chunk, sorted by structure id.
+    pub starts: Vec<DumpedStart>,
+    /// Structure references: structure id → packed start-chunk positions (sorted).
+    pub references: Vec<(String, Vec<i64>)>,
+}
+
+/// A structure start of a `ZTC1` dump.
+#[derive(Clone, Debug)]
+pub struct DumpedStart {
+    pub structure: String,
+    pub chunk_x: i32,
+    pub chunk_z: i32,
+    pub references: i32,
+    pub valid: bool,
+    /// min x, y, z, max x, y, z (inclusive).
+    pub bounds: [i32; 6],
+    pub pieces: Vec<DumpedPiece>,
+}
+
+/// One piece of a structure start.
+#[derive(Clone, Debug)]
+pub struct DumpedPiece {
+    pub kind: String,
+    pub bounds: [i32; 6],
+    /// Orientation name (`north`, ...) or empty.
+    pub orientation: String,
+    pub depth: i32,
 }
 
 /// Parse a `ZTC1` dump (docs/specs/parity/terrain-chunks.md).
@@ -454,6 +481,19 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
         fn str(&mut self) -> anyhow::Result<String> {
             let n = self.u16()? as usize;
             Ok(String::from_utf8(self.take(n)?.to_vec())?)
+        }
+        fn i64(&mut self) -> anyhow::Result<i64> {
+            Ok(i64::from_be_bytes(self.take(8)?.try_into()?))
+        }
+        fn bounds(&mut self) -> anyhow::Result<[i32; 6]> {
+            Ok([
+                self.i32()?,
+                self.i32()?,
+                self.i32()?,
+                self.i32()?,
+                self.i32()?,
+                self.i32()?,
+            ])
         }
     }
     let mut r = R(raw, 0);
@@ -490,6 +530,42 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
             .map(|_| Ok((r.i32()?, r.u16()?)))
             .collect::<anyhow::Result<Vec<_>>>()?;
         let (block_ticks, fluid_ticks) = (r.i32()?, r.i32()?);
+        let mut starts = Vec::new();
+        for _ in 0..r.i32()? {
+            let structure = r.str()?;
+            let (chunk_x, chunk_z, references) = (r.i32()?, r.i32()?, r.i32()?);
+            let valid = r.take(1)?[0] != 0;
+            let bounds = r.bounds()?;
+            let mut pieces = Vec::new();
+            for _ in 0..r.i32()? {
+                let kind = r.str()?;
+                let bounds = r.bounds()?;
+                let orientation = r.str()?;
+                pieces.push(DumpedPiece {
+                    kind,
+                    bounds,
+                    orientation,
+                    depth: r.i32()?,
+                });
+            }
+            starts.push(DumpedStart {
+                structure,
+                chunk_x,
+                chunk_z,
+                references,
+                valid,
+                bounds,
+                pieces,
+            });
+        }
+        let mut references = Vec::new();
+        for _ in 0..r.i32()? {
+            let id = r.str()?;
+            let longs = (0..r.i32()?)
+                .map(|_| r.i64())
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            references.push((id, longs));
+        }
         chunks.push(DumpedChunk {
             dimension,
             x,
@@ -504,6 +580,8 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
             post_processing,
             block_ticks,
             fluid_ticks,
+            starts,
+            references,
         });
     }
     ensure!(r.1 == raw.len(), "trailing bytes in ZTC1 dump");
@@ -592,6 +670,41 @@ pub fn chunks_command(
                 .collect::<Vec<_>>()
                 .join(" ")
         );
+        for st in &c.starts {
+            println!(
+                "  start {} at chunk ({},{}) refs {} valid {} box {:?}: {} pieces, first {}",
+                st.structure,
+                st.chunk_x,
+                st.chunk_z,
+                st.references,
+                st.valid,
+                st.bounds,
+                st.pieces.len(),
+                st.pieces.first().map_or_else(
+                    || "-".to_owned(),
+                    |p| format!(
+                        "{} {:?} '{}' depth {}",
+                        p.kind, p.bounds, p.orientation, p.depth
+                    )
+                )
+            );
+        }
+        if !c.references.is_empty() {
+            println!(
+                "  references: {}",
+                c.references
+                    .iter()
+                    .map(|(id, l)| {
+                        let starts: Vec<String> = l
+                            .iter()
+                            .map(|&v| format!("({},{})", v as i32, (v >> 32) as i32))
+                            .collect();
+                        format!("{id} from {}", starts.join(" "))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
     Ok(!chunks.is_empty())
 }

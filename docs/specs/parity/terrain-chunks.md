@@ -75,6 +75,29 @@ chunks[count]       : {
     }
     block_ticks     : i32                    // scheduled block ticks held by the chunk (-1: not countable)
     fluid_ticks     : i32                    // scheduled fluid ticks held by the chunk (-1: not countable)
+    start_count     : i32
+    starts[start_count] : {                  // structure starts held by this chunk, sorted by structure id
+        structure   : str                    // e.g. "minecraft:mineshaft"
+        start_chunk_x : i32
+        start_chunk_z : i32
+        references  : i32                    // the start's reference counter
+        valid       : u8                     // 1 = a real start
+        bounds[6]   : i32                    // min x, y, z, max x, y, z (inclusive)
+        piece_count : i32
+        pieces[piece_count] : {              // in the start's own list order
+            kind    : str                    // structure piece type id, e.g. "minecraft:msroom"
+            bounds[6] : i32
+            orientation : str                // "north", "south", "west", "east", ... or "" when none
+            depth   : i32                    // generation depth
+        }
+    }
+    reference_count : i32
+    references[reference_count] : {          // sorted by structure id
+        structure   : str
+        count       : i32
+        starts[count] : i64                  // packed start-chunk positions, ascending: x in the low 32 bits,
+                                             // z in the high 32 bits
+    }
 }
 ```
 
@@ -83,6 +106,14 @@ Notes:
 - At the `terrain` status 26.3 chunks hold all six heightmap types (`MOTION_BLOCKING`, `MOTION_BLOCKING_NO_LEAVES`,
   `OCEAN_FLOOR`, `OCEAN_FLOOR_WG`, `WORLD_SURFACE`, `WORLD_SURFACE_WG`).
 - The world folder (game-generated data) is deleted by the Rust side after reading; nothing is kept in the repo.
+
+## Structure starts and references
+
+Every chunk record ends with the chunk's structure starts and references, so structure placement can be verified on
+its own (request `structure_starts` / `structure_references`). With `generate-structures=false` both lists are empty.
+Self-check (seed 12345, structures on): chunk (104,104) at `structure_references` references `minecraft:mineshaft`
+from (108,105); chunk (108,105) at `structure_starts` holds that mineshaft start (box 1675,−10,1609 … 1816,17,1737,
+157 pieces, the first an `msroom` with no orientation at depth 0).
 
 ## Self-check (2026-11-25, seed 12345, structures off, `terrain`)
 
