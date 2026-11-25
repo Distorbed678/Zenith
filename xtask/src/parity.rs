@@ -743,3 +743,27 @@ pub fn noise_samples(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     Ok(passed == total)
 }
+
+// ── blockstate-ids ───────────────────────────────────────────────────────────
+
+/// `blockstate-ids`: zenith-registry computes every global block-state ID from the specified enumeration rule
+/// (alphabetical properties, `true` before `false`, last property fastest, registration order); each must equal the
+/// ID in vanilla's own data-generator report (ingested from the user's jar by `zenith-data ingest`).
+pub fn blockstate_ids(version: &str, write: bool) -> anyhow::Result<bool> {
+    let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
+        .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
+    let table = zenith_registry::block_state::BlockStateTable::from_tables(&tables)
+        .map_err(|e| anyhow::anyhow!("build block-state table: {e}"))?;
+    let (matched, total) = table.verify_against(&tables);
+    println!(
+        "blockstate-ids {version}: {matched}/{total} computed state IDs equal vanilla's report"
+    );
+    for m in table.diff_against(&tables, 10) {
+        println!("  FAIL {m:?}");
+    }
+    if write {
+        SuiteResult::new("blockstate-ids", version, matched as u64, total as u64)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(matched == total)
+}

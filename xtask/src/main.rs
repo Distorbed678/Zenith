@@ -55,6 +55,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Compute every block-state ID from the spec rule and compare with vanilla's report.
+    BlockstateIds {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Compare zenith-math's noise generators with vanilla's at fixed sample points.
     NoiseSamples {
         #[arg(long, default_value = "26.3")]
@@ -130,6 +137,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::BlockstateIds { version, write },
+        } => parity::blockstate_ids(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::NoiseSamples { version, write },
         } => parity::noise_samples(&version, write),

@@ -22,6 +22,8 @@ zenith-install = { path = "../crates/zenith-install" }
 zenith-parity = { path = "../crates/zenith-parity" }
 zenith-nbt = { path = "../crates/zenith-nbt" }
 zenith-math = { path = "../crates/zenith-math" }
+zenith-data = { path = "../crates/zenith-data" }
+zenith-registry = { path = "../crates/zenith-registry" }
 flate2.workspace = true
 
 [lints]

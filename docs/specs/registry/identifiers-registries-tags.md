@@ -706,6 +706,12 @@ Given the merged map of `tag_id -> list of entries`:
    skips pending tag reload creation for that registry rather than clearing previously applied tags. Confirm whether
    `/reload` removing the last custom tag from a static registry that has no vanilla tags exhibits this stale-tag
    retention in the oracle.
+5. **Filesystem root-resolution scope for `..` path segments:** Section 1.2 states that resolving an identifier joins
+   `root / namespace / path` and rejects targets escaping `root`, whereas Edge Case 2 states `"minecraft:../secret"` is
+   rejected even though `root / minecraft / ../secret` normalizes to `root / secret` (escaping `root / minecraft`, not
+   `root`). Confirm whether vanilla checks containment against `root / namespace`, rejects all `..` path segments
+   (including non-escaping `minecraft:a/../b`), or rejects empty/`.` namespaces during pack path resolution. Implemented
+   conservatively by enforcing containment within both `root` and `root / namespace` and rejecting leading `/` in paths.
 
 ## Reader review (2026-11-25)
 The block-state enumeration rule above (alphabetical properties, `true` before `false`, last property fastest,

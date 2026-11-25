@@ -129,14 +129,14 @@ id = "M4"
 phase = "P1"
 title = "Registries, identifiers & tags"
 weight = 3
-status = "planned"
+status = "in-progress"
 suites = ["registry-ids", "blockstate-ids"]
 tasks = [
-  { t = "Identifier type + validation rules", done = false },
+  { t = "Identifier type + validation rules", done = true },
   { t = "Static + dynamic registries with vanilla numeric IDs", done = false },
-  { t = "Block states & properties with identical global state IDs", done = false },
+  { t = "Block states & properties with identical global state IDs", done = true },
   { t = "Tag loading + resolution order", done = false },
-  { t = "Feature flags", done = false },
+  { t = "Feature flags", done = true },
 ]
 
 [[milestone]]
