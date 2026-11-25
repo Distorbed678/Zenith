@@ -83,15 +83,15 @@ id = "M1"
 phase = "P1"
 title = "Parity harness & data-gen ingestion"
 weight = 4
-status = "planned"
+status = "done"
 suites = ["datagen-ingest"]
 tasks = [
-  { t = "Java runtime discovery (launcher-bundled Java 25)", done = false },
-  { t = "Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports", done = false },
-  { t = "Compile reports into versioned binary tables (zenith-data)", done = false },
-  { t = "Parity oracle Java agent skeleton (local-only, tools/oracle)", done = false },
-  { t = "State-dump format + differ (zenith-parity)", done = false },
-  { t = "Parity results → progress/parity/*.json → tracker", done = false },
+  { t = "Java runtime discovery (launcher-bundled Java 25)", done = true },
+  { t = "Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports", done = true },
+  { t = "Compile reports into versioned binary tables (zenith-data)", done = true },
+  { t = "Parity oracle Java agent skeleton (local-only, tools/oracle)", done = true },
+  { t = "State-dump format + differ (zenith-parity)", done = true },
+  { t = "Parity results → progress/parity/*.json → tracker", done = true },
 ]
 
 [[milestone]]

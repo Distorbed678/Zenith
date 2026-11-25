@@ -32,7 +32,8 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 - Our own Java code, built locally against the user's jar **as a compile-time-only dependency**. It is never
   committed with game code, and never distributed. The guard allows `.java` only in this folder.
 - Loaded with `-javaagent:` into the vanilla client or server started from the user's install. It instruments chosen
-  methods (via a bytecode library, e.g. ByteBuddy) to emit **state dumps**:
+  methods with the JDK's own class-file API (`java.lang.classfile`, Java 24+; no third-party libraries) to emit
+  **state dumps**:
   - per tick: RNG states (world random, per-entity randoms), block changes, scheduled tick queues, entity
     positions/velocities/AI goals/memories, light updates, scoreboard;
   - worldgen: per-chunk block palettes, heightmaps, biomes, structure starts, feature placement log;
@@ -41,8 +42,10 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 - The dump format is a versioned, length-prefixed binary stream with zstd compression (`zenith-parity::dump`). The same
   writer API exists on the Zenith side behind the `parity-dump` cargo feature.
 - Hook points are found from the unobfuscated jar's class and method signatures (javap). Hook descriptors live in
-  `tools/oracle/hooks/<version>.toml`. These are names and signatures only, which are facts needed for
-  interoperability.
+  `tools/oracle/hooks/<version>.properties`. These are names and signatures only, which are facts needed for
+  interoperability. The agent compiles without the game on its classpath and reads state through public methods
+  reflectively. **Status (M1):** built and verified. It runs the user's own 26.3 dedicated server for N ticks; two runs
+  with the same seed produce identical dumps (the determinism baseline).
 
 ### 2. Differ: `zenith-parity`
 

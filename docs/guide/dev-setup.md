@@ -21,6 +21,8 @@ cargo run -p zenith-install -- check       # needs your own launched 26.3 instal
 cargo xtask guard                          # hygiene scan (hash rule needs a local install, or use --fetch)
 cargo xtask progress                       # regenerate the tracker after editing progress/milestones.toml
 pnpm install && pnpm -C web dev            # website at http://localhost:5173
+cargo run -p zenith-data -- ingest         # build game tables from your install (uses your launcher's Java)
+cargo xtask oracle run --ticks 100 --out /tmp/vanilla.zpd --accept-eula   # parity oracle (asks for EULA once)
 ```
 
 ## Reference material (local only)

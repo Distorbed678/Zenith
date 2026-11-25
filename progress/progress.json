@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T00:05:16Z",
+  "generatedAt": "2026-11-25T00:28:43Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 1.4,
-    "parityPercent": 0.0,
-    "milestonesDone": 1,
+    "percent": 4.1,
+    "parityPercent": 3.2,
+    "milestonesDone": 2,
     "milestonesTotal": 33,
-    "suitesPassing": 0,
+    "suitesPassing": 1,
     "suitesTotal": 31
   },
   "phases": [
@@ -28,7 +28,7 @@
       "id": "P1",
       "title": "Core data",
       "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
-      "percent": 0.0,
+      "percent": 23.5,
       "weight": 17.0,
       "milestones": [
         "M1",
@@ -178,44 +178,44 @@
       "id": "M1",
       "phase": "P1",
       "title": "Parity harness & data-gen ingestion",
-      "status": "planned",
+      "status": "done",
       "weight": 4.0,
-      "percent": 0.0,
-      "tasksDone": 0,
+      "percent": 100.0,
+      "tasksDone": 6,
       "tasksTotal": 6,
       "tasks": [
         {
           "title": "Java runtime discovery (launcher-bundled Java 25)",
-          "done": false
+          "done": true
         },
         {
           "title": "Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports",
-          "done": false
+          "done": true
         },
         {
           "title": "Compile reports into versioned binary tables (zenith-data)",
-          "done": false
+          "done": true
         },
         {
           "title": "Parity oracle Java agent skeleton (local-only, tools/oracle)",
-          "done": false
+          "done": true
         },
         {
           "title": "State-dump format + differ (zenith-parity)",
-          "done": false
+          "done": true
         },
         {
           "title": "Parity results → progress/parity/*.json → tracker",
-          "done": false
+          "done": true
         }
       ],
       "suites": [
         {
           "id": "datagen-ingest",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 44418,
+          "total": 44418,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1352,8 +1352,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 1.4,
-      "parityPercent": 0.0
+      "percent": 4.1,
+      "parityPercent": 3.2
     }
   ]
 }

@@ -54,13 +54,13 @@ Repo, rules, plan, hygiene guard, ownership proof, tracker, website.
 |---|---|---|---|---|
 | **M0** Foundation & tooling | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)<br>☑ Master plan written (docs/plan/00–13)<br>☑ ADRs for the founding decisions<br>☑ Cargo workspace + pinned toolchain<br>☑ zenith-install: locate installs + local ownership proof<br>☑ Asset/trademark/decompile guard (xtask + pre-commit + CI)<br>☑ Tracker pipeline (milestones → progress.json → SVG)<br>☑ Pixel-crafted design system (packages/ui)<br>☑ Website v1 on GitHub Pages<br>☑ Public GitHub repo + CI | — |
 
-#### P1 Core data: 0.0%
+#### P1 Core data: 23.5%
 
 Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 
 | Milestone | Status | Progress | Tasks | Parity suites |
 |---|---|---|---|---|
-| **M1** Parity harness & data-gen ingestion | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Java runtime discovery (launcher-bundled Java 25)<br>☐ Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports<br>☐ Compile reports into versioned binary tables (zenith-data)<br>☐ Parity oracle Java agent skeleton (local-only, tools/oracle)<br>☐ State-dump format + differ (zenith-parity)<br>☐ Parity results → progress/parity/*.json → tracker | `datagen-ingest` 0/0 |
+| **M1** Parity harness & data-gen ingestion | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Java runtime discovery (launcher-bundled Java 25)<br>☑ Run vanilla data generator on the user's jar → ~/.cache/zenith/26.3/reports<br>☑ Compile reports into versioned binary tables (zenith-data)<br>☑ Parity oracle Java agent skeleton (local-only, tools/oracle)<br>☑ State-dump format + differ (zenith-parity)<br>☑ Parity results → progress/parity/*.json → tracker | `datagen-ingest` 44418/44418 |
 | **M2** NBT & SNBT | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Binary NBT read/write (file + network variants)<br>☐ Modified UTF-8 + depth/size limits identical to vanilla<br>☐ SNBT parser + printer (vanilla formatting)<br>☐ Fuzz targets (cargo-fuzz)<br>☐ Round-trip every NBT blob in vanilla-generated worlds | `nbt-roundtrip` 0/0<br>`snbt-format` 0/0 |
 | **M3** Saves: region files & level data | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)<br>☐ level.dat, playerdata, entities/ and poi/ region files<br>☐ Session lock + atomic save semantics<br>☐ io_uring backend on Linux (opt-in internal, same bytes)<br>☐ Vanilla opens Zenith-saved worlds without fixups (oracle check) | `anvil-io` 0/0 |
 | **M4** Registries, identifiers & tags | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Identifier type + validation rules<br>☐ Static + dynamic registries with vanilla numeric IDs<br>☐ Block states & properties with identical global state IDs<br>☐ Tag loading + resolution order<br>☐ Feature flags | `registry-ids` 0/0<br>`blockstate-ids` 0/0 |

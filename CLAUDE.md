@@ -69,6 +69,10 @@ cargo test --workspace               # unit + parity tests that need no game fil
 cargo run -p zenith-install -- check # run local proof against the installed 26.3
 cargo xtask progress                 # regenerate progress.json + README SVG tracker
 cargo xtask guard                    # asset/trademark/decompile hygiene scan
+cargo run -p zenith-data -- ingest   # run the game's data generator → ~/.cache/zenith/versions/<v>/tables.bin
+cargo run -p zenith-data -- verify --results-dir progress/parity   # datagen-ingest parity suite
+cargo xtask oracle run --ticks 100 --out /tmp/v.zpd   # vanilla server + oracle agent → ZPD1 dump
+cargo run -p zenith-parity -- diff a.zpd b.zpd       # first divergence between two dumps
 pnpm -C web dev                      # website dev server
 git config core.hooksPath .githooks  # enable the pre-commit guard (once per clone)
 ```
@@ -86,3 +90,8 @@ git config core.hooksPath .githooks  # enable the pre-commit guard (once per clo
 - Conventional commits (`feat(nbt): …`), release-please changelogs. ADR for every major decision.
 - Crates are named `zenith-<area>`. The MSRV is pinned in `rust-toolchain.toml`.
 - Every engine subsystem ships with a parity suite. A subsystem counts as "done" only at 100% parity.
+- Clean-room split: the main thread is the **reader** (local reference in `~/.cache/zenith/reference/<v>/`, decompiled
+  with Vineflower; writes specs in its own words). Implementers (delegates/sessions) work only from specs + public docs
+  and never read the reference.
+- The EULA for oracle runs was accepted by the owner (local + CI; decision 10.2). It is recorded in
+  `~/.config/zenith/eula-accepted`.

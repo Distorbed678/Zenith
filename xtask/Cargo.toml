@@ -19,6 +19,7 @@ zip.workspace = true
 ureq.workspace = true
 clap.workspace = true
 zenith-install = { path = "../crates/zenith-install" }
+zenith-parity = { path = "../crates/zenith-parity" }
 
 [lints]
 workspace = true

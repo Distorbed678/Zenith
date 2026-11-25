@@ -16,6 +16,9 @@ pub struct JarVersionInfo {
     pub protocol_version: i32,
     #[serde(default)]
     pub java_version: Option<u32>,
+    /// The launcher runtime component this version expects, e.g. `java-runtime-epsilon`.
+    #[serde(default)]
+    pub java_component: Option<String>,
     #[serde(default)]
     pub stable: Option<bool>,
 }

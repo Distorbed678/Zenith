@@ -13,6 +13,8 @@ pub mod assets;
 pub mod discover;
 pub mod evidence;
 pub mod jar;
+pub mod java;
+pub mod libraries;
 pub mod manifest;
 pub mod proof;
 

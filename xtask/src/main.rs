@@ -1,6 +1,7 @@
 //! Repo automation. Run with `cargo xtask <command>`.
 
 mod guard;
+mod oracle;
 mod progress;
 mod svg;
 
@@ -24,6 +25,11 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
+    /// Build or run the parity oracle agent inside the user's own vanilla server.
+    Oracle {
+        #[command(subcommand)]
+        cmd: OracleCmd,
+    },
     /// Scan the repo for Mojang files, decompiled code and trademark misuse.
     Guard {
         /// Scan only files staged for commit (used by the pre-commit hook).
@@ -41,6 +47,31 @@ enum Cmd {
     },
 }
 
+#[derive(Subcommand)]
+enum OracleCmd {
+    /// Compile the agent jar into tools/oracle/build/.
+    Build {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+    },
+    /// Run the vanilla dedicated server with the agent for N ticks and write a ZPD1 dump.
+    Run {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long, default_value_t = 100)]
+        ticks: u32,
+        #[arg(long, default_value_t = 12345)]
+        seed: i64,
+        #[arg(long)]
+        out: PathBuf,
+        /// Accept the Minecraft EULA for oracle runs (remembered in ~/.config/zenith/eula-accepted).
+        #[arg(long)]
+        accept_eula: bool,
+        #[arg(long, default_value_t = 600)]
+        timeout_secs: u64,
+    },
+}
+
 /// The repository root (the parent of this crate's directory).
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -52,6 +83,27 @@ pub fn repo_root() -> PathBuf {
 fn main() -> ExitCode {
     let result = match Cli::parse().cmd {
         Cmd::Progress { check } => progress::run(check),
+        Cmd::Oracle {
+            cmd: OracleCmd::Build { version },
+        } => oracle::build(&version).map(|_| true),
+        Cmd::Oracle {
+            cmd:
+                OracleCmd::Run {
+                    version,
+                    ticks,
+                    seed,
+                    out,
+                    accept_eula,
+                    timeout_secs,
+                },
+        } => oracle::run(&oracle::RunOptions {
+            version,
+            ticks,
+            seed,
+            out,
+            accept_eula,
+            timeout_secs,
+        }),
         Cmd::Guard {
             staged,
             version,
