@@ -5,8 +5,6 @@
 
 // PARITY: pinned by snbt-format oracle fixtures (M2 parity phase)
 
-use std::fmt::Write;
-
 /// Separator between a compound key and its value (`key:value`).
 pub const COMPOUND_KV_SEP: &str = ":";
 
@@ -50,19 +48,19 @@ pub const DOUBLE_SUFFIX: char = 'd';
 pub const HEX_ESCAPE_LOWERCASE: bool = true;
 
 /// Formats a `f32` value with its SNBT suffix: Java's `Float.toString` (see [`crate::java_number`]) + `f`.
-pub fn write_float(out: &mut String, v: f32) {
-    crate::java_number::write_java_float(out, v);
+pub fn write_float<W: crate::snbt::printer::SnbtOut>(out: &mut W, v: f32) {
+    out.push_str(&crate::java_number::java_float_to_string(v));
     out.push(FLOAT_SUFFIX);
 }
 
 /// Formats an `f64` value with its SNBT suffix: Java's `Double.toString` (see [`crate::java_number`]) + `d`.
-pub fn write_double(out: &mut String, v: f64) {
-    crate::java_number::write_java_double(out, v);
+pub fn write_double<W: crate::snbt::printer::SnbtOut>(out: &mut W, v: f64) {
+    out.push_str(&crate::java_number::java_double_to_string(v));
     out.push(DOUBLE_SUFFIX);
 }
 
 /// Writes a `\xXX` control-character escape for `byte < 0x20`.
-pub fn write_hex_escape(out: &mut String, byte: u8) {
+pub fn write_hex_escape<W: crate::snbt::printer::SnbtOut>(out: &mut W, byte: u8) {
     if HEX_ESCAPE_LOWERCASE {
         let _ = write!(out, "\\x{byte:02x}");
     } else {

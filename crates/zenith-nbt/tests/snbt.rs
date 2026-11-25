@@ -329,3 +329,21 @@ fn parser_booleans_case_insensitive() {
         Tag::String(NbtString::from("truely"))
     );
 }
+
+/// Reader answer Q3: unpaired surrogates are printed raw (exact UTF-16 output), never escaped.
+#[test]
+fn utf16_output_keeps_lone_surrogates_raw() {
+    let mut c = Compound::new();
+    c.insert(
+        "lone",
+        Tag::String(NbtString::from_utf16(vec![0x61, 0xD800, 0x62])),
+    );
+    let units = zenith_nbt::to_snbt_utf16(&Tag::Compound(c.clone())).unwrap();
+    assert!(
+        units.windows(3).any(|w| w == [0x61, 0xD800, 0x62]),
+        "{units:x?}"
+    );
+    // The String form can't hold a lone surrogate: it uses U+FFFD instead of inventing an escape.
+    let text = to_snbt(&Tag::Compound(c)).unwrap();
+    assert!(text.contains("a\u{FFFD}b"), "{text}");
+}

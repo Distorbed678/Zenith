@@ -194,11 +194,18 @@ fn begin_read_tag<R: Read>(
         }
         TagType::Float => {
             state.acc.charge(charges::FLOAT)?;
-            Ok(Some(Tag::Float(f32::from_bits(read_u32(r)?))))
+            {
+                // Like the game's tag factory: any value equal to zero (including -0.0) becomes the shared +0.0.
+                let v = f32::from_bits(read_u32(r)?);
+                Ok(Some(Tag::Float(if v == 0.0 { 0.0 } else { v })))
+            }
         }
         TagType::Double => {
             state.acc.charge(charges::DOUBLE)?;
-            Ok(Some(Tag::Double(f64::from_bits(read_u64(r)?))))
+            {
+                let v = f64::from_bits(read_u64(r)?);
+                Ok(Some(Tag::Double(if v == 0.0 { 0.0 } else { v })))
+            }
         }
         TagType::ByteArray => read_byte_array(r, state.acc).map(|v| Some(Tag::ByteArray(v))),
         TagType::String => {
@@ -414,12 +421,20 @@ fn write_payload<W: Write>(w: &mut W, tag: &Tag) -> Result<(), Error> {
             w.write_all(&v.to_be_bytes())?;
             Ok(())
         }
+        // Writes canonicalize NaN like Java's floatToIntBits/doubleToLongBits (verified with the oracle: every NaN
+        // is written as 0x7FC00000 / 0x7FF8000000000000); reads keep the exact bits in memory.
         Tag::Float(v) => {
-            w.write_all(&v.to_bits().to_be_bytes())?;
+            let bits = if v.is_nan() { 0x7FC0_0000 } else { v.to_bits() };
+            w.write_all(&bits.to_be_bytes())?;
             Ok(())
         }
         Tag::Double(v) => {
-            w.write_all(&v.to_bits().to_be_bytes())?;
+            let bits = if v.is_nan() {
+                0x7FF8_0000_0000_0000
+            } else {
+                v.to_bits()
+            };
+            w.write_all(&bits.to_be_bytes())?;
             Ok(())
         }
         Tag::ByteArray(arr) => write_byte_array(w, arr),

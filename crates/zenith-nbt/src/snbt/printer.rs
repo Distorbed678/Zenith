@@ -1,12 +1,48 @@
 //! Plain single-line SNBT printer following `docs/specs/nbt/snbt.md`.
 
-use std::fmt::Write;
-
 use crate::compound::Compound;
 use crate::error::Error;
 use crate::list::List;
 use crate::mutf8::NbtString;
 use crate::snbt::style;
+
+/// Output sink for the SNBT printer. `String` replaces an unpaired surrogate with U+FFFD; [`Utf16Snbt`] keeps the
+/// exact UTF-16 code units, matching the text the game holds (spec: snbt.md, reader answer Q3).
+pub trait SnbtOut: std::fmt::Write {
+    /// Append a character.
+    fn push(&mut self, c: char) {
+        let _ = self.write_char(c);
+    }
+    /// Append a string.
+    fn push_str(&mut self, s: &str) {
+        let _ = self.write_str(s);
+    }
+    /// Append an unpaired UTF-16 surrogate exactly (it is printed raw, never escaped).
+    fn lone_surrogate(&mut self, unit: u16);
+}
+
+impl SnbtOut for String {
+    fn lone_surrogate(&mut self, _unit: u16) {
+        String::push(self, '\u{FFFD}');
+    }
+}
+
+/// Exact UTF-16 SNBT output.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Utf16Snbt(pub Vec<u16>);
+
+impl std::fmt::Write for Utf16Snbt {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.0.extend(s.encode_utf16());
+        Ok(())
+    }
+}
+
+impl SnbtOut for Utf16Snbt {
+    fn lone_surrogate(&mut self, unit: u16) {
+        self.0.push(unit);
+    }
+}
 use crate::tag::Tag;
 
 /// Formats a [`Tag`] as a plain single-line SNBT string.
@@ -17,6 +53,13 @@ pub fn to_snbt(tag: &Tag) -> Result<String, Error> {
     let mut out = String::new();
     write_tag(&mut out, tag)?;
     Ok(out)
+}
+
+/// Like [`to_snbt`], but returns the exact UTF-16 code units, including unpaired surrogates (no replacement).
+pub fn to_snbt_utf16(tag: &Tag) -> Result<Vec<u16>, Error> {
+    let mut out = Utf16Snbt::default();
+    write_tag(&mut out, tag)?;
+    Ok(out.0)
 }
 
 /// Returns `true` if `key` may be printed bare (unquoted) in a compound according to
@@ -44,7 +87,7 @@ pub fn is_bare_key(key: &NbtString) -> bool {
 
 /// Formats an [`NbtString`] as a quoted SNBT string literal using the content-driven
 /// quote selection and control-character escape rules from `docs/specs/nbt/snbt.md`.
-pub fn write_quoted_string(out: &mut String, s: &NbtString) {
+pub fn write_quoted_string<W: SnbtOut>(out: &mut W, s: &NbtString) {
     let quote = choose_quote(s);
     out.push(quote);
     if let Some(utf8) = s.as_str() {
@@ -56,7 +99,7 @@ pub fn write_quoted_string(out: &mut String, s: &NbtString) {
             match decoded {
                 Ok(ch) => write_escaped_char(out, ch, quote),
                 Err(surrogate) => {
-                    let _ = write!(out, "\\u{:04x}", surrogate.unpaired_surrogate());
+                    out.lone_surrogate(surrogate.unpaired_surrogate());
                 }
             }
         }
@@ -87,7 +130,7 @@ fn choose_quote(s: &NbtString) -> char {
     '"'
 }
 
-fn write_escaped_char(out: &mut String, ch: char, quote: char) {
+fn write_escaped_char<W: SnbtOut>(out: &mut W, ch: char, quote: char) {
     match ch {
         '\\' => out.push_str("\\\\"),
         c if c == quote => {
@@ -106,7 +149,7 @@ fn write_escaped_char(out: &mut String, ch: char, quote: char) {
     }
 }
 
-fn write_key(out: &mut String, key: &NbtString) {
+fn write_key<W: SnbtOut>(out: &mut W, key: &NbtString) {
     if is_bare_key(key) {
         out.push_str(key.as_str().expect("bare key is always valid UTF-8"));
     } else {
@@ -114,7 +157,7 @@ fn write_key(out: &mut String, key: &NbtString) {
     }
 }
 
-fn write_compound(out: &mut String, compound: &Compound) -> Result<(), Error> {
+fn write_compound<W: SnbtOut>(out: &mut W, compound: &Compound) -> Result<(), Error> {
     // The text form sorts keys by Java's natural string order (UTF-16 code units), unlike the binary form, which
     // writes hash-map order (spec: snbt.md, reader answer Q1). Sorting by UTF-16 units differs from `str` ordering
     // for characters above U+FFFF.
@@ -134,7 +177,7 @@ fn write_compound(out: &mut String, compound: &Compound) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_list(out: &mut String, list: &List) -> Result<(), Error> {
+fn write_list<W: SnbtOut>(out: &mut W, list: &List) -> Result<(), Error> {
     out.push('[');
     for (idx, elem) in list.iter().enumerate() {
         if idx > 0 {
@@ -146,7 +189,7 @@ fn write_list(out: &mut String, list: &List) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_tag(out: &mut String, tag: &Tag) -> Result<(), Error> {
+fn write_tag<W: SnbtOut>(out: &mut W, tag: &Tag) -> Result<(), Error> {
     match tag {
         Tag::End => out.push_str("END"),
         Tag::Byte(v) => {

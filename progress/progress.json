@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T03:37:31Z",
+  "generatedAt": "2026-11-25T03:52:06Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 9.3,
-    "parityPercent": 21.9,
-    "milestonesDone": 2,
+    "percent": 9.6,
+    "parityPercent": 25.0,
+    "milestonesDone": 3,
     "milestonesTotal": 33,
-    "suitesPassing": 7,
+    "suitesPassing": 8,
     "suitesTotal": 32
   },
   "phases": [
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 3.0,
+      "percent": 3.6,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -253,15 +253,15 @@
       "suites": [
         {
           "id": "nbt-roundtrip",
-          "passed": 47212,
-          "total": 47212,
+          "passed": 32515,
+          "total": 32515,
           "percent": 100.0,
           "updatedAt": "2026-11-25"
         },
         {
           "id": "snbt-format",
-          "passed": 47212,
-          "total": 47212,
+          "passed": 32515,
+          "total": 32515,
           "percent": 100.0,
           "updatedAt": "2026-11-25"
         }
@@ -408,9 +408,9 @@
       "id": "M6",
       "phase": "P2",
       "title": "Math, RNG & noise primitives",
-      "status": "in-progress",
+      "status": "done",
       "weight": 2.0,
-      "percent": 83.3,
+      "percent": 100.0,
       "tasksDone": 4,
       "tasksTotal": 4,
       "tasks": [
@@ -448,10 +448,10 @@
         },
         {
           "id": "math-helpers",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 3552,
+          "total": 3552,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1359,8 +1359,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 9.3,
-      "parityPercent": 21.9
+      "percent": 9.6,
+      "parityPercent": 25.0
     }
   ]
 }

@@ -38,5 +38,5 @@ pub use io::{
 };
 pub use list::List;
 pub use mutf8::{AsNbtString, MAX_ENCODED_LEN, NbtString};
-pub use snbt::{parse_snbt, parse_snbt_compound, to_snbt};
+pub use snbt::{parse_snbt, parse_snbt_compound, to_snbt, to_snbt_utf16};
 pub use tag::{Tag, TagType};

@@ -55,6 +55,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Compare zenith-math's Java-exact helpers with the game's own on a fixed probe list.
+    MathHelpers {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Zenith copies real vanilla region files; vanilla reads both and compares chunks and sector layouts.
     AnvilIo {
         #[arg(long, default_value = "26.3")]
@@ -146,6 +153,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::MathHelpers { version, write },
+        } => parity::math_helpers(&version, write),
         Cmd::Parity {
             cmd:
                 ParityCmd::AnvilIo {

@@ -223,61 +223,41 @@ fn list_wrapper_rules_mixed_empty_and_wrapper_shaped_compounds() {
 
 #[test]
 fn float_and_double_bit_patterns_nan_and_neg_zero() {
-    let f_neg_zero = -0.0f32;
-    let f_pos_zero = 0.0f32;
-    let f_nan_a = f32::from_bits(0x7FC0_1234);
-    let f_nan_b = f32::from_bits(0xFFC1_ABCD);
-
-    let d_neg_zero = -0.0f64;
-    let d_pos_zero = 0.0f64;
-    let d_nan_a = f64::from_bits(0x7FF8_1234_5678_9ABC);
-    let d_nan_b = f64::from_bits(0xFFF8_DEAD_BEEF_CAFE);
-
-    assert_ne!(Tag::Float(f_neg_zero), Tag::Float(f_pos_zero));
-    assert_ne!(Tag::Float(f_nan_a), Tag::Float(f_nan_b));
-    assert_ne!(Tag::Double(d_neg_zero), Tag::Double(d_pos_zero));
-    assert_ne!(Tag::Double(d_nan_a), Tag::Double(d_nan_b));
-
+    // Verified against vanilla with the oracle (2026-11-25): reading turns -0.0 into +0.0 (the game's tag factory
+    // shares one zero instance); every NaN is written canonically.
     let mut c = Compound::new();
-    c.insert("fnz", Tag::Float(f_neg_zero));
-    c.insert("fpz", Tag::Float(f_pos_zero));
-    c.insert("fnana", Tag::Float(f_nan_a));
-    c.insert("fnanb", Tag::Float(f_nan_b));
-    c.insert("dnz", Tag::Double(d_neg_zero));
-    c.insert("dpz", Tag::Double(d_pos_zero));
-    c.insert("dnana", Tag::Double(d_nan_a));
-    c.insert("dnanb", Tag::Double(d_nan_b));
-
-    let tag = Tag::Compound(c);
-    let wire = to_bytes_named("", &tag).unwrap();
+    c.insert("fnz", Tag::Float(-0.0));
+    c.insert("dnz", Tag::Double(-0.0));
+    c.insert("fnan", Tag::Float(f32::from_bits(0xFFC1_ABCD)));
+    c.insert("fsnan", Tag::Float(f32::from_bits(0x7F80_0001)));
+    c.insert("dnan", Tag::Double(f64::from_bits(0xFFF8_DEAD_BEEF_CAFE)));
+    c.insert("dsnan", Tag::Double(f64::from_bits(0x7FF0_0000_0000_0001)));
+    let wire = to_bytes_named("", &Tag::Compound(c)).unwrap();
     let (_, decoded) = from_bytes_named(&wire, &mut Accounter::default_quota()).unwrap();
-    assert_eq!(decoded, tag);
-
     let dc = decoded.as_compound().unwrap();
-    assert_eq!(
-        dc.get("fnz").unwrap().as_float().unwrap().to_bits(),
-        f_neg_zero.to_bits()
-    );
-    assert_eq!(
-        dc.get("fnana").unwrap().as_float().unwrap().to_bits(),
-        0x7FC0_1234
-    );
-    assert_eq!(
-        dc.get("fnanb").unwrap().as_float().unwrap().to_bits(),
-        0xFFC1_ABCD
-    );
-    assert_eq!(
-        dc.get("dnz").unwrap().as_double().unwrap().to_bits(),
-        d_neg_zero.to_bits()
-    );
-    assert_eq!(
-        dc.get("dnana").unwrap().as_double().unwrap().to_bits(),
-        0x7FF8_1234_5678_9ABC
-    );
-    assert_eq!(
-        dc.get("dnanb").unwrap().as_double().unwrap().to_bits(),
-        0xFFF8_DEAD_BEEF_CAFE
-    );
+    let f = |k: &str| dc.get(k).unwrap().as_float().unwrap().to_bits();
+    let d = |k: &str| dc.get(k).unwrap().as_double().unwrap().to_bits();
+    assert_eq!(f("fnz"), 0.0f32.to_bits());
+    assert_eq!(d("dnz"), 0.0f64.to_bits());
+    assert_eq!(f("fnan"), 0x7FC0_0000);
+    assert_eq!(f("fsnan"), 0x7FC0_0000);
+    assert_eq!(d("dnan"), 0x7FF8_0000_0000_0000);
+    assert_eq!(d("dsnan"), 0x7FF8_0000_0000_0000);
+
+    // Reading keeps the exact bits in memory (only writing canonicalizes).
+    let mut raw = vec![0x0A, 0, 0, 0x05, 0, 1, b'f'];
+    raw.extend_from_slice(&0xFFC1_ABCDu32.to_be_bytes());
+    raw.push(0);
+    let (_, t) = from_bytes_named(&raw, &mut Accounter::default_quota()).unwrap();
+    let got = t
+        .as_compound()
+        .unwrap()
+        .get("f")
+        .unwrap()
+        .as_float()
+        .unwrap()
+        .to_bits();
+    assert_eq!(got, 0xFFC1_ABCD);
 }
 
 #[test]

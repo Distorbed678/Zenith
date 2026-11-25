@@ -133,6 +133,13 @@ fn world_roots(extra: &[PathBuf]) -> Vec<PathBuf> {
     roots
 }
 
+fn hex(b: &[u8]) -> String {
+    b.iter()
+        .map(|x| format!("{x:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn first_difference(a: &[u8], b: &[u8]) -> usize {
     a.iter()
         .zip(b)
@@ -140,7 +147,135 @@ fn first_difference(a: &[u8], b: &[u8]) -> usize {
         .unwrap_or(a.len().min(b.len()))
 }
 
-/// Gather the corpus: jar structures, then world files, capped at `MAX_ITEMS`.
+/// Hand-made edge cases that real worlds rarely contain (our own generated data, built at run time). Every case is
+/// run through vanilla too, so rejections must match as well as successful re-saves.
+fn synthetic_items() -> Vec<Item> {
+    fn name(out: &mut Vec<u8>, s: &[u8]) {
+        out.extend_from_slice(&(s.len() as u16).to_be_bytes());
+        out.extend_from_slice(s);
+    }
+    fn root(ty: u8, body: &[u8]) -> Vec<u8> {
+        let mut v = vec![ty];
+        name(&mut v, b"");
+        v.extend_from_slice(body);
+        v
+    }
+    fn entry(out: &mut Vec<u8>, ty: u8, key: &[u8], payload: &[u8]) {
+        out.push(ty);
+        name(out, key);
+        out.extend_from_slice(payload);
+    }
+    fn nested_compounds(depth: usize) -> Vec<u8> {
+        // root compound containing `depth - 1` nested compounds under key "n"
+        let mut body = Vec::new();
+        for _ in 1..depth {
+            body.push(10);
+            name(&mut body, b"n");
+        }
+        body.extend(std::iter::repeat_n(0u8, depth));
+        root(10, &body)
+    }
+    let mut items: Vec<(String, Vec<u8>)> = Vec::new();
+
+    // Non-canonical NaNs and negative zero (vanilla writes canonical NaNs).
+    let mut c = Vec::new();
+    for (k, bits) in [
+        (&b"f_neg_nan"[..], 0xFFC0_0000u32),
+        (b"f_snan", 0x7F80_0001),
+        (b"f_payload", 0x7FC0_0123),
+        (b"f_neg_zero", 0x8000_0000),
+    ] {
+        entry(&mut c, 5, k, &bits.to_be_bytes());
+    }
+    for (k, bits) in [
+        (&b"d_neg_nan"[..], 0xFFF8_0000_0000_0000u64),
+        (b"d_snan", 0x7FF0_0000_0000_0001),
+        (b"d_neg_zero", 0x8000_0000_0000_0000),
+    ] {
+        entry(&mut c, 6, k, &bits.to_be_bytes());
+    }
+    c.push(0);
+    items.push(("nan-and-zero".into(), root(10, &c)));
+
+    // Depth boundary around vanilla's limit of 512.
+    for d in [510, 511, 512, 513] {
+        items.push((format!("depth-{d}"), nested_compounds(d)));
+    }
+
+    // List of compounds where one element already has the wrapper shape ({"": value}).
+    let mut l = vec![10];
+    l.extend_from_slice(&2i32.to_be_bytes());
+    entry(&mut l, 3, b"", &7i32.to_be_bytes());
+    l.push(0);
+    entry(&mut l, 3, b"", &8i32.to_be_bytes());
+    entry(&mut l, 1, b"x", &[1]);
+    l.push(0);
+    let mut c = Vec::new();
+    entry(&mut c, 9, b"wrapped", &l);
+    // Empty lists declared with a non-End element type, and with End.
+    let mut empty_int = vec![3];
+    empty_int.extend_from_slice(&0i32.to_be_bytes());
+    entry(&mut c, 9, b"empty_int", &empty_int);
+    let mut empty_end = vec![0];
+    empty_end.extend_from_slice(&0i32.to_be_bytes());
+    entry(&mut c, 9, b"empty_end", &empty_end);
+    // Duplicate key: the later value wins.
+    entry(&mut c, 3, b"dup", &1i32.to_be_bytes());
+    entry(&mut c, 3, b"dup", &2i32.to_be_bytes());
+    c.push(0);
+    items.push(("lists-and-duplicates".into(), root(10, &c)));
+
+    // Strings: NUL (C0 80), an astral character as two 3-byte surrogates, a lone surrogate.
+    let mut c = Vec::new();
+    for (k, mutf8) in [
+        (&b"nul"[..], &[0x61u8, 0xC0, 0x80, 0x62][..]),
+        (b"astral", &[0xED, 0xA0, 0xBD, 0xED, 0xB8, 0x80]),
+        (b"lone", &[0xED, 0xA0, 0x80]),
+    ] {
+        let mut v = (mutf8.len() as u16).to_be_bytes().to_vec();
+        v.extend_from_slice(mutf8);
+        entry(&mut c, 8, k, &v);
+    }
+    c.push(0);
+    items.push(("strings".into(), root(10, &c)));
+
+    // Malformed input that both sides must reject.
+    let mut bad = Vec::new();
+    entry(&mut bad, 8, b"s", &[0, 4, 0xF0, 0x9F, 0x98, 0x80]); // 4-byte UTF-8 is invalid in modified UTF-8
+    bad.push(0);
+    items.push(("reject-4byte-utf8".into(), root(10, &bad)));
+    let mut bad = vec![0];
+    bad.extend_from_slice(&3i32.to_be_bytes());
+    let mut c = Vec::new();
+    entry(&mut c, 9, b"l", &bad); // End-typed list with elements
+    c.push(0);
+    items.push(("reject-end-list".into(), root(10, &c)));
+    let mut c = Vec::new();
+    entry(&mut c, 13, b"t", &[]); // unknown tag type
+    c.push(0);
+    items.push(("reject-unknown-type".into(), root(10, &c)));
+    let mut c = Vec::new();
+    entry(&mut c, 11, b"a", &(-1i32).to_be_bytes()); // negative array length
+    c.push(0);
+    items.push(("reject-negative-length".into(), root(10, &c)));
+
+    // Non-compound roots.
+    let mut l = vec![8];
+    l.extend_from_slice(&1i32.to_be_bytes());
+    l.extend_from_slice(&[0, 2, b'h', b'i']);
+    items.push(("root-list".into(), root(9, &l)));
+    items.push(("root-string".into(), root(8, &[0, 2, b'o', b'k'])));
+
+    items
+        .into_iter()
+        .map(|(label, payload)| Item {
+            label: format!("synthetic:{label}"),
+            payload,
+        })
+        .collect()
+}
+
+/// Gather the corpus: jar structures, then world files, capped at `MAX_ITEMS`, then the synthetic edge cases.
 fn collect_corpus(version: &str, extra: &[PathBuf]) -> anyhow::Result<(Vec<Item>, usize, usize)> {
     let mut items = Vec::new();
     let structures = jar_structures(version, &mut items)?;
@@ -165,6 +300,7 @@ fn collect_corpus(version: &str, extra: &[PathBuf]) -> anyhow::Result<(Vec<Item>
     }
     items.truncate(MAX_ITEMS);
 
+    items.extend(synthetic_items());
     Ok((items, structures, skipped))
 }
 
@@ -243,11 +379,18 @@ pub fn nbt_roundtrip(version: &str, extra: &[PathBuf], write: bool) -> anyhow::R
             });
         match (vanilla, ours) {
             (Ok(v), Ok(z)) if *v == z => passed += 1,
-            (Ok(v), Ok(z)) => failures.push(format!(
-                "{}: differs from vanilla at offset {}",
-                item.label,
-                first_difference(&z, v)
-            )),
+            (Ok(v), Ok(z)) => {
+                let detail = if item.label.starts_with("synthetic:") {
+                    format!("\n      vanilla: {}\n      zenith:  {}", hex(v), hex(&z))
+                } else {
+                    String::new()
+                };
+                failures.push(format!(
+                    "{}: differs from vanilla at offset {}{detail}",
+                    item.label,
+                    first_difference(&z, v)
+                ))
+            }
             (Err(_), Err(_)) => passed += 1,
             (Err(msg), Ok(_)) => failures.push(format!(
                 "{}: vanilla rejects ({msg}), Zenith accepts",
@@ -281,20 +424,32 @@ pub fn snbt_format(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Res
     let (mut passed, mut failures) = (0u64, Vec::new());
     for (item, vanilla) in items.iter().zip(&reference) {
         let ours = read_named(&mut &item.payload[..], &mut Accounter::unlimited())
-            .and_then(|(_, tag)| zenith_nbt::to_snbt(&tag));
+            .and_then(|(_, tag)| zenith_nbt::to_snbt_utf16(&tag))
+            .map(|units| {
+                units
+                    .iter()
+                    .flat_map(|u| u.to_be_bytes())
+                    .collect::<Vec<u8>>()
+            });
         match (vanilla, ours) {
-            (Ok(v), Ok(z)) if v.as_slice() == z.as_bytes() => passed += 1,
+            (Ok(v), Ok(z)) if *v == z => passed += 1,
             (Ok(v), Ok(z)) => {
-                let at = first_difference(z.as_bytes(), v);
+                // Both sides are UTF-16BE: show ~40 characters around the first difference, decoded.
+                let at = first_difference(&z, v) / 2 * 2;
                 let ctx = |b: &[u8]| {
-                    String::from_utf8_lossy(&b[at.saturating_sub(40)..(at + 40).min(b.len())])
-                        .into_owned()
+                    let window = &b[at.saturating_sub(80).min(b.len())..(at + 80).min(b.len())];
+                    let units: Vec<u16> = window
+                        .chunks_exact(2)
+                        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                        .collect();
+                    String::from_utf16_lossy(&units)
                 };
                 failures.push(format!(
-                    "{}: at {at}\n      vanilla: {}\n      zenith:  {}",
+                    "{}: at UTF-16 unit {}\n      vanilla: {}\n      zenith:  {}",
                     item.label,
+                    at / 2,
                     ctx(v),
-                    ctx(z.as_bytes())
+                    ctx(&z)
                 ));
             }
             (Err(_), Err(_)) => passed += 1,
@@ -952,4 +1107,302 @@ pub fn anvil_io(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Result
             .write(&repo_root().join("progress/parity"))?;
     }
     Ok(passed == total && zenith_errors.is_empty())
+}
+
+// ── math-helpers ─────────────────────────────────────────────────────────────
+
+/// Sentinel for a helper call that vanilla rejects (throws). Must match `MathHelpers.REJECTED`.
+const MH_REJECTED: u64 = 0x7EEE_DEAD_BEEF_0001;
+const MH_ALPHAS: [f64; 7] = [0.0, 1.0, 0.5, -0.5, 1.5, 0.25, f64::NAN];
+const MH_ENDS: [(f64, f64); 6] = [
+    (0.0, 1.0),
+    (1.0, 0.0),
+    (-5.5, 3.25),
+    (1e9, -1e9),
+    (0.1, 0.2),
+    (3.0e7, 3.0e7 + 1.0),
+];
+
+fn mh_doubles() -> Vec<f64> {
+    let mut v = vec![
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        0.5,
+        -0.5,
+        1e-9,
+        -1e-9,
+        1e-300,
+        3.0e9,
+        -3.0e9,
+        1e19,
+        -1e19,
+        1e300,
+        180.0,
+        -180.0,
+        359.9,
+        720.25,
+        3.14159,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        2_147_483_647.5,
+        -2_147_483_648.5,
+        9.3e18,
+        -9.3e18,
+    ];
+    let scales = [1.0, 100.0, 1.0e4, 1.0e7, 1.0e10];
+    let mut s: i64 = 0x51AB_C0DE_1234_5678;
+    for i in 0..120 {
+        s = s
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let u = ((s as u64) >> 11) as f64 * 2f64.powi(-53);
+        v.push((u * 2.0 - 1.0) * scales[i % scales.len()]);
+    }
+    v
+}
+
+fn mh_ints() -> Vec<i32> {
+    let mut v = vec![
+        0,
+        1,
+        -1,
+        2,
+        3,
+        7,
+        8,
+        1023,
+        1024,
+        1025,
+        1 << 30,
+        (1 << 30) + 1,
+        i32::MAX,
+        i32::MIN,
+        -2,
+        -1024,
+    ];
+    let mut s: i64 = 0x0DDB_A11C_AFE5_EED5;
+    for _ in 0..60 {
+        s = s
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        v.push(((s as u64) >> 32) as i32);
+    }
+    v
+}
+
+/// The shared probe list. Must stay in the same order as `MathHelpers.main`.
+fn mh_probes() -> Vec<(u64, &'static str)> {
+    use zenith_math::helpers::{angles, color, interp, packing, roots, rounding, trig};
+    let fb = |v: f32| i64::from(v.to_bits() as i32) as u64;
+    let db = |v: f64| v.to_bits();
+    let ib = |v: i32| i64::from(v) as u64;
+    // black_box keeps the compiler from constant-folding the probes: Rust doesn't guarantee NaN sign/payload in
+    // compile-time evaluation, while the running game (and Zenith at runtime) use the hardware's rules.
+    let (d, ints) = (
+        std::hint::black_box(mh_doubles()),
+        std::hint::black_box(mh_ints()),
+    );
+    let f: Vec<f32> = d.iter().map(|&x| x as f32).collect();
+    let mut o: Vec<(u64, &'static str)> = Vec::new();
+    for &x in &d {
+        o.push((fb(trig::sin(x)), "sin"));
+    }
+    for &x in &d {
+        o.push((fb(trig::cos(x)), "cos"));
+    }
+    for i in 0..d.len() {
+        o.push((db(trig::atan2(d[i], d[(i * 7 + 3) % d.len()])), "atan2"));
+    }
+    for &x in &d {
+        o.push((db(roots::fast_inv_sqrt(x)), "fastInvSqrt"));
+    }
+    for &x in &f {
+        o.push((fb(roots::fast_inv_cube_root(x)), "fastInvCubeRoot"));
+    }
+    for &x in &f {
+        o.push((fb(roots::inv_sqrt_f32(x)), "invSqrt(float)"));
+    }
+    for &x in &d {
+        o.push((db(roots::inv_sqrt_f64(x)), "invSqrt(double)"));
+    }
+    for &x in &f {
+        o.push((ib(rounding::floor_f32(x)), "floor(float)"));
+    }
+    for &x in &d {
+        o.push((ib(rounding::floor_f64(x)), "floor(double)"));
+    }
+    for &x in &d {
+        o.push((rounding::lfloor(x) as u64, "lfloor"));
+    }
+    for &x in &f {
+        o.push((ib(rounding::ceil_f32(x)), "ceil(float)"));
+    }
+    for &x in &d {
+        o.push((ib(rounding::ceil_f64(x)), "ceil(double)"));
+    }
+    for &x in &f {
+        o.push((fb(rounding::frac_f32(x)), "frac(float)"));
+    }
+    for &x in &d {
+        o.push((db(rounding::frac_f64(x)), "frac(double)"));
+    }
+    for &x in &ints {
+        o.push((ib(angles::wrap_degrees_i32(x)), "wrapDegrees(int)"));
+    }
+    for &x in &f {
+        o.push((fb(angles::wrap_degrees_f32(x)), "wrapDegrees(float)"));
+    }
+    for &x in &d {
+        o.push((db(angles::wrap_degrees_f64(x)), "wrapDegrees(double)"));
+    }
+    for a in std::hint::black_box(MH_ALPHAS) {
+        for (e0, e1) in std::hint::black_box(MH_ENDS) {
+            o.push((
+                fb(interp::lerp_f32(a as f32, e0 as f32, e1 as f32)),
+                "lerp(float)",
+            ));
+        }
+    }
+    for a in std::hint::black_box(MH_ALPHAS) {
+        for (e0, e1) in std::hint::black_box(MH_ENDS) {
+            o.push((db(interp::lerp_f64(a, e0, e1)), "lerp(double)"));
+        }
+    }
+    for a in std::hint::black_box(MH_ALPHAS) {
+        for (e0, e1) in std::hint::black_box(MH_ENDS) {
+            o.push((db(interp::clamped_lerp_f64(a, e0, e1)), "clampedLerp"));
+        }
+    }
+    for a in std::hint::black_box(MH_ALPHAS) {
+        for (e0, e1) in std::hint::black_box(MH_ENDS) {
+            o.push((db(interp::inverse_lerp_f64(a, e0, e1)), "inverseLerp"));
+        }
+    }
+    for &x in &f {
+        o.push((fb(interp::smoothstep(x)), "smoothstep"));
+    }
+    for i in 0..ints.len() {
+        let m = ints[(i * 5 + 1) % ints.len()];
+        o.push((
+            if m == 0 {
+                MH_REJECTED
+            } else {
+                ib(rounding::positive_modulo_i32(ints[i], m))
+            },
+            "positiveModulo",
+        ));
+    }
+    for &x in &ints {
+        o.push((ib(rounding::ceillog2(x)), "ceillog2"));
+    }
+    for &x in &ints {
+        o.push((ib(rounding::log2(x)), "log2"));
+    }
+    for &x in &ints {
+        o.push((
+            ib(rounding::smallest_encompassing_power_of_two(x)),
+            "smallestEncompassingPowerOfTwo",
+        ));
+    }
+    for i in 0..60 {
+        let k = f64::from(i);
+        let (h, s, v) = (
+            ((k * 0.618034) % 1.0) as f32,
+            ((k * 0.414214) % 1.0) as f32,
+            ((k * 0.732051) % 1.0) as f32,
+        );
+        o.push((ib(color::hsv_to_rgb(h, s, v)), "hsvToRgb"));
+    }
+    for &x in &d {
+        o.push((ib(rounding::sign(x)), "sign"));
+    }
+    for i in 0..ints.len() {
+        let packed = packing::block_as_long(
+            ints[i],
+            ints[(i * 3 + 1) % ints.len()],
+            ints[(i * 11 + 2) % ints.len()],
+        );
+        o.push((packed as u64, "BlockPos.asLong"));
+    }
+    let mut s: i64 = 0x0B10_C0B0_5EED_0001;
+    for _ in 0..80 {
+        s = s
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        o.push((ib(packing::block_get_x(s)), "BlockPos.getX"));
+        o.push((ib(packing::block_get_y(s)), "BlockPos.getY"));
+        o.push((ib(packing::block_get_z(s)), "BlockPos.getZ"));
+    }
+    o
+}
+
+/// `math-helpers`: zenith-math's helpers must equal the game's own helpers bit for bit on the shared probe list.
+pub fn math_helpers(version: &str, write: bool) -> anyhow::Result<bool> {
+    let ours = mh_probes();
+    let (install, java) = crate::oracle::install_and_java(version)?;
+    let agent = crate::oracle::build(version)?;
+    let mut cp = zenith_install::libraries::game_classpath(&install)?;
+    cp.push(agent);
+    let dir = zenith_install::cache_dir().join("parity/math-helpers");
+    fs::create_dir_all(&dir)?;
+    let out_file = dir.join("vanilla.bin");
+    let out = std::process::Command::new(&java.java)
+        .arg("-cp")
+        .arg(zenith_install::libraries::join_classpath(&cp))
+        .arg("dev.zenith.oracle.MathHelpers")
+        .arg(&out_file)
+        .output()
+        .context("run vanilla math helpers")?;
+    anyhow::ensure!(
+        out.status.success(),
+        "vanilla math helpers failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let raw = fs::read(&out_file)?;
+    let vanilla: Vec<u64> = raw
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|c| u64::from_be_bytes(*c))
+        .collect();
+    anyhow::ensure!(
+        vanilla.len() == ours.len(),
+        "value count differs: vanilla {} vs zenith {}",
+        vanilla.len(),
+        ours.len()
+    );
+    let mut by_label: std::collections::BTreeMap<&str, (u64, u64)> =
+        std::collections::BTreeMap::new();
+    let mut failures = Vec::new();
+    let mut passed = 0u64;
+    for (i, ((z, label), v)) in ours.iter().zip(&vanilla).enumerate() {
+        let e = by_label.entry(label).or_default();
+        e.1 += 1;
+        if z == v {
+            passed += 1;
+            e.0 += 1;
+        } else if failures.len() < 12 {
+            failures.push(format!(
+                "#{i} {label}: vanilla {v:#018x} vs zenith {z:#018x}"
+            ));
+        }
+    }
+    let total = ours.len() as u64;
+    println!("math-helpers {version}: {passed}/{total} values identical to vanilla");
+    for (label, (p, t)) in &by_label {
+        if p != t {
+            println!("  {label:<34} {p}/{t}");
+        }
+    }
+    for f in &failures {
+        println!("  FAIL {f}");
+    }
+    if write {
+        SuiteResult::new("math-helpers", version, passed, total)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(passed == total)
 }

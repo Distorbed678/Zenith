@@ -5,4 +5,4 @@ pub mod printer;
 pub mod style;
 
 pub use parser::{parse_snbt, parse_snbt_compound};
-pub use printer::{is_bare_key, to_snbt};
+pub use printer::{SnbtOut, Utf16Snbt, is_bare_key, to_snbt, to_snbt_utf16};

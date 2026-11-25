@@ -599,3 +599,14 @@ Method names in this spec are kept on purpose: the `math-helpers` oracle suite c
 the user's own game, so the names are interoperability facts. Three constants were checked numerically: the
 degrees-conversion constant is one ULP below `(float)(180/π)` (`0x42652EE0`), sine-table entry 32768 is `0x250D3132`,
 and the widened `1.0E-5F` threshold is `0x3EE4F8B580000000`.
+
+## Parity status (2026-11-25)
+`math-helpers`: **3,552/3,552** values identical to vanilla 26.3 over 32 probes (table sin/cos, atan2, fast inverse
+roots, floor/ceil/frac variants, wrap-degrees variants, the lerp family, smoothstep, positive modulo, power-of-two/log
+helpers, HSV, sign, block-position packing), on specials (±0, NaN, ±∞, near 2³¹/2⁶³) and a pseudo-random sweep.
+
+Engineering rule found on the way: Rust does not guarantee the sign/payload of NaN results, and LLVM may legally
+rewrite `x / -1.0` into `-x` when the divisor is a compile-time constant (which flips a NaN's sign bit). The running
+game follows the hardware's rules. So Zenith code must never depend on a NaN's sign or payload, except where the game
+canonicalizes (e.g. NBT writes) or deliberately reads raw bits. In that case, compute with runtime values and cover the
+case in a parity suite.

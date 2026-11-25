@@ -160,7 +160,7 @@ id = "M6"
 phase = "P2"
 title = "Math, RNG & noise primitives"
 weight = 2
-status = "in-progress"
+status = "done"
 suites = ["rng-streams", "noise-samples", "math-helpers"]
 tasks = [
   { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = true },

@@ -20,7 +20,7 @@ import java.nio.file.Path;
  * Reference for the {@code nbt-roundtrip} suite: reads each corpus item with the game's own NBT reader and writes it
  * back with the game's own writer, so Zenith can be compared with what vanilla itself produces.
  *
- * <p>Modes: {@code resave} (default) writes the bytes vanilla re-serializes; {@code snbt} writes the UTF-8 text vanilla
+ * <p>Modes: {@code resave} (default) writes the bytes vanilla re-serializes; {@code snbt} writes the UTF-16BE text vanilla
  * prints for the value ({@code toString()}, the single-line SNBT form).
  *
  * <p>Input: repeated {@code [u32 length][named-root NBT bytes]}. Output: repeated
@@ -62,7 +62,14 @@ public final class NbtRoundtrip {
                     // Serialize fully before writing the status byte, so a failure can't leave a half-written record.
                     byte[] produced;
                     if (snbt) {
-                        produced = String.valueOf(value).getBytes(StandardCharsets.UTF_8);
+                        // Raw UTF-16 code units, big-endian: lossless, unpaired surrogates included (charset encoders
+                        // would replace them).
+                        String text = String.valueOf(value);
+                        produced = new byte[text.length() * 2];
+                        for (int k = 0; k < text.length(); k++) {
+                            produced[2 * k] = (byte) (text.charAt(k) >> 8);
+                            produced[2 * k + 1] = (byte) text.charAt(k);
+                        }
                     } else {
                         ByteArrayOutputStream written = new ByteArrayOutputStream(length);
                         write.invoke(null, value, new DataOutputStream(written));

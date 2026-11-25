@@ -17,8 +17,8 @@ deterministic.
 | 2 | Short | 2 bytes, signed |
 | 3 | Int | 4 bytes, signed |
 | 4 | Long | 8 bytes, signed |
-| 5 | Float | 4 bytes, IEEE-754 (bit pattern preserved exactly, NaN payloads included) |
-| 6 | Double | 8 bytes, IEEE-754 (bit pattern preserved exactly) |
+| 5 | Float | 4 bytes, IEEE-754. Read: bits kept, except **−0.0 → +0.0**. **Write: any NaN becomes the canonical `0x7FC00000`** |
+| 6 | Double | 8 bytes, IEEE-754. Read: bits kept, except **−0.0 → +0.0**. **Write: any NaN becomes the canonical `0x7FF8000000000000`** |
 | 7 | Byte array | signed 32-bit length, then that many bytes |
 | 8 | String | unsigned 16-bit byte length, then Java *modified* UTF-8 |
 | 9 | List | element type ID (1 byte), signed 32-bit count, then the elements' payloads |
@@ -97,7 +97,10 @@ deterministic.
 2. Strings with U+0000, lone surrogates, astral characters, and exactly 65,535 / 65,536 encoded bytes.
 3. Compounds grown past 12, 24 and 48 entries (resize points), and copies of compounds after removals.
 4. Depth 512 vs 513; quota boundaries hit by both a single large array and many small tags.
-5. Float/double NaN bit patterns and negative zero preserved through round trips.
+5. **Negative zero becomes +0.0 on read** (the game creates float/double tags through a factory that shares one zero
+   instance for any value equal to zero); NaN payloads and signs are kept in memory after a read but
+   **canonicalized on write** (correction 2026-11-25, verified with the oracle: signaling, negative and payload NaNs
+   all come back canonical from vanilla's writer).
 
 ## Open questions
 1. **Root name accounting in named-root reads:** Does vanilla's `read_named` charge the `Accounter` for the root tag's name string (e.g. `28 + 2 × utf16_len`), or skip/read it uncharged? Current implementation does not charge the root name (matching the table, which only lists the 13 tag types and compound keys).
