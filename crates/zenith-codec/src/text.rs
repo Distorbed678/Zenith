@@ -16,13 +16,13 @@ pub struct Component(pub Json);
 impl Component {
     /// A plain literal string component.
     pub fn literal(text: impl Into<String>) -> Self {
-        Self(Json::String(text.into()))
+        Self(Json::string(text.into()))
     }
 
     /// A translatable component with no arguments.
     pub fn translatable(key: impl Into<String>) -> Self {
         let mut obj = crate::json::JsonObject::new();
-        obj.insert("translate", Json::String(key.into()));
+        obj.insert("translate", Json::string(key.into()));
         Self(Json::Object(obj))
     }
 }
@@ -106,7 +106,7 @@ fn expect_bool(obj: &crate::json::JsonObject, key: &str) -> Result<(), String> {
 fn validate_object(obj: &crate::json::JsonObject, depth: usize) -> Result<(), String> {
     // Content.
     let explicit = match obj.get("type") {
-        Some(Json::String(t)) => Some(t.as_str()),
+        Some(Json::String(t)) => Some(t.to_string_lossy()),
         Some(Json::Null) | None => None,
         Some(other) => {
             return Err(format!(
@@ -115,7 +115,7 @@ fn validate_object(obj: &crate::json::JsonObject, depth: usize) -> Result<(), St
             ));
         }
     };
-    let kind = match explicit {
+    let kind = match explicit.as_deref() {
         Some("text") => "text",
         Some("translatable") => "translate",
         Some("score") => "score",
@@ -216,10 +216,13 @@ fn validate_object(obj: &crate::json::JsonObject, depth: usize) -> Result<(), St
     match obj.get("color") {
         None | Some(Json::Null) => {}
         Some(Json::String(c)) => {
-            let hex = c
-                .strip_prefix('#')
-                .is_some_and(|h| h.len() == 6 && h.bytes().all(|b| b.is_ascii_hexdigit()));
-            if !hex && !NAMED_COLORS.contains(&c.as_str()) {
+            let valid = c.as_str().is_some_and(|s| {
+                let hex = s
+                    .strip_prefix('#')
+                    .is_some_and(|h| h.len() == 6 && h.bytes().all(|b| b.is_ascii_hexdigit()));
+                hex || NAMED_COLORS.contains(&s)
+            });
+            if !valid {
                 return Err(format!("Invalid color: {c}"));
             }
         }
@@ -240,7 +243,7 @@ fn validate_object(obj: &crate::json::JsonObject, depth: usize) -> Result<(), St
         expect_bool(obj, key)?;
     }
     if let Some(Json::String(f)) = obj.get("font") {
-        if Identifier::parse(f).is_err() {
+        if f.as_str().is_none_or(|s| Identifier::parse(s).is_err()) {
             return Err(format!("Invalid font identifier: {f}"));
         }
     } else if let Some(other) = obj.get("font").filter(|v| !v.is_null()) {

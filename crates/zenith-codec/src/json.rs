@@ -9,6 +9,10 @@
 use std::collections::HashMap;
 use std::fmt;
 
+/// Lossless JSON string capable of holding any sequence of UTF-16 code units, including unpaired
+/// surrogates (reuses [`zenith_nbt::NbtString`]).
+pub use zenith_nbt::NbtString as JsonString;
+
 /// Maximum number of nested containers (arrays/objects). Opening one more is a parse error.
 ///
 /// Verified with the oracle (datapack-load, 2026-11-25): the game's bundled JSON library accepts 255 nested arrays and
@@ -190,8 +194,8 @@ fn pow10_wrapping(mut exp: u64) -> u64 {
 /// An insertion-ordered JSON object. Duplicate keys keep the **last** value in the position of the first.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct JsonObject {
-    entries: Vec<(String, Json)>,
-    index: HashMap<String, usize>,
+    entries: Vec<(JsonString, Json)>,
+    index: HashMap<JsonString, usize>,
 }
 
 impl JsonObject {
@@ -201,7 +205,7 @@ impl JsonObject {
     }
 
     /// Inserts or replaces a value (a replaced key keeps its original position).
-    pub fn insert(&mut self, key: impl Into<String>, value: Json) {
+    pub fn insert(&mut self, key: impl Into<JsonString>, value: Json) {
         let key = key.into();
         match self.index.get(&key) {
             Some(&i) => self.entries[i].1 = value,
@@ -212,24 +216,40 @@ impl JsonObject {
         }
     }
 
-    /// Looks a key up.
+    /// Looks a UTF-8 key up.
     pub fn get(&self, key: &str) -> Option<&Json> {
+        if self.entries.len() <= 16 {
+            self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+        } else {
+            self.index
+                .get(&JsonString::from(key))
+                .map(|&i| &self.entries[i].1)
+        }
+    }
+
+    /// Looks a lossless [`JsonString`] key up (including keys containing unpaired surrogates).
+    pub fn get_key(&self, key: &JsonString) -> Option<&Json> {
         self.index.get(key).map(|&i| &self.entries[i].1)
     }
 
-    /// Whether the key is present (even with a `null` value).
+    /// Whether the UTF-8 key is present (even with a `null` value).
     pub fn contains_key(&self, key: &str) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Whether the lossless [`JsonString`] key is present (even with a `null` value).
+    pub fn contains_key_lossless(&self, key: &JsonString) -> bool {
         self.index.contains_key(key)
     }
 
     /// Entries in insertion order.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Json)> {
-        self.entries.iter().map(|(k, v)| (k.as_str(), v))
+    pub fn iter(&self) -> impl Iterator<Item = (&JsonString, &Json)> {
+        self.entries.iter().map(|(k, v)| (k, v))
     }
 
     /// Keys in insertion order.
-    pub fn keys(&self) -> impl Iterator<Item = &str> {
-        self.entries.iter().map(|(k, _)| k.as_str())
+    pub fn keys(&self) -> impl Iterator<Item = &JsonString> {
+        self.entries.iter().map(|(k, _)| k)
     }
 
     /// Number of distinct keys.
@@ -252,8 +272,8 @@ pub enum Json {
     Bool(bool),
     /// A number (original text kept).
     Number(JsonNumber),
-    /// A string.
-    String(String),
+    /// A lossless UTF-16-capable string.
+    String(JsonString),
     /// An array.
     Array(Vec<Json>),
     /// An object (insertion-ordered).
@@ -261,6 +281,11 @@ pub enum Json {
 }
 
 impl Json {
+    /// Creates a [`Json::String`] from any UTF-8 or lossless string.
+    pub fn string(s: impl Into<JsonString>) -> Self {
+        Self::String(s.into())
+    }
+
     /// Short type name for messages.
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -289,8 +314,16 @@ impl Json {
         }
     }
 
-    /// The string, if this is one.
+    /// The string as `&str`, if this is a string containing no unpaired UTF-16 surrogates.
     pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => s.as_str(),
+            _ => None,
+        }
+    }
+
+    /// The lossless string, if this is a string.
+    pub fn as_json_str(&self) -> Option<&JsonString> {
         match self {
             Self::String(s) => Some(s),
             _ => None,
@@ -368,19 +401,34 @@ impl fmt::Display for Json {
     }
 }
 
-fn write_json_string(s: &str, out: &mut String) {
+fn write_json_char(c: char, out: &mut String) {
+    match c {
+        '"' => out.push_str("\\\""),
+        '\\' => out.push_str("\\\\"),
+        '\n' => out.push_str("\\n"),
+        '\r' => out.push_str("\\r"),
+        '\t' => out.push_str("\\t"),
+        '\u{8}' => out.push_str("\\b"),
+        '\u{c}' => out.push_str("\\f"),
+        c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+        c => out.push(c),
+    }
+}
+
+fn write_json_string(s: &JsonString, out: &mut String) {
     out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
+    if let Some(utf8) = s.as_str() {
+        for c in utf8.chars() {
+            write_json_char(c, out);
+        }
+    } else {
+        for decoded in char::decode_utf16(s.to_utf16()) {
+            match decoded {
+                Ok(c) => write_json_char(c, out),
+                Err(surrogate) => {
+                    out.push_str(&format!("\\u{:04x}", surrogate.unpaired_surrogate()));
+                }
+            }
         }
     }
     out.push('"');
@@ -433,6 +481,48 @@ struct Parser<'a> {
     src: &'a [u8],
     text: &'a str,
     pos: usize,
+}
+
+enum StringBuf {
+    Utf8(String),
+    Utf16(Vec<u16>),
+}
+
+impl StringBuf {
+    fn push_str(&mut self, s: &str) {
+        match self {
+            Self::Utf8(buf) => buf.push_str(s),
+            Self::Utf16(units) => units.extend(s.encode_utf16()),
+        }
+    }
+
+    fn push_char(&mut self, c: char) {
+        match self {
+            Self::Utf8(buf) => buf.push(c),
+            Self::Utf16(units) => {
+                let mut tmp = [0u16; 2];
+                units.extend_from_slice(c.encode_utf16(&mut tmp));
+            }
+        }
+    }
+
+    fn push_surrogate(&mut self, unit: u16) {
+        match self {
+            Self::Utf8(buf) => {
+                let mut units: Vec<u16> = buf.encode_utf16().collect();
+                units.push(unit);
+                *self = Self::Utf16(units);
+            }
+            Self::Utf16(units) => units.push(unit),
+        }
+    }
+
+    fn into_json_string(self) -> JsonString {
+        match self {
+            Self::Utf8(buf) => JsonString::from(buf),
+            Self::Utf16(units) => JsonString::from_utf16(units),
+        }
+    }
 }
 
 impl Parser<'_> {
@@ -535,10 +625,10 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_string(&mut self) -> Result<String, JsonError> {
+    fn parse_string(&mut self) -> Result<JsonString, JsonError> {
         debug_assert_eq!(self.src[self.pos], b'"');
         self.pos += 1;
-        let mut out = String::new();
+        let mut out = StringBuf::Utf8(String::new());
         let mut run_start = self.pos;
         loop {
             let Some(&b) = self.src.get(self.pos) else {
@@ -548,7 +638,7 @@ impl Parser<'_> {
                 b'"' => {
                     out.push_str(&self.text[run_start..self.pos]);
                     self.pos += 1;
-                    return Ok(out);
+                    return Ok(out.into_json_string());
                 }
                 b'\\' => {
                     out.push_str(&self.text[run_start..self.pos]);
@@ -562,20 +652,20 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_escape(&mut self, out: &mut String) -> Result<(), JsonError> {
+    fn parse_escape(&mut self, out: &mut StringBuf) -> Result<(), JsonError> {
         let Some(&b) = self.src.get(self.pos) else {
             return Err(self.err("unterminated escape"));
         };
         self.pos += 1;
         match b {
-            b'"' => out.push('"'),
-            b'\\' => out.push('\\'),
-            b'/' => out.push('/'),
-            b'b' => out.push('\u{8}'),
-            b'f' => out.push('\u{c}'),
-            b'n' => out.push('\n'),
-            b'r' => out.push('\r'),
-            b't' => out.push('\t'),
+            b'"' => out.push_char('"'),
+            b'\\' => out.push_char('\\'),
+            b'/' => out.push_char('/'),
+            b'b' => out.push_char('\u{8}'),
+            b'f' => out.push_char('\u{c}'),
+            b'n' => out.push_char('\n'),
+            b'r' => out.push_char('\r'),
+            b't' => out.push_char('\t'),
             b'u' => {
                 let hi = self.parse_hex4()?;
                 if (0xD800..0xDC00).contains(&hi) {
@@ -585,18 +675,19 @@ impl Parser<'_> {
                         let lo = self.parse_hex4()?;
                         if (0xDC00..0xE000).contains(&lo) {
                             let cp = 0x10000 + ((hi - 0xD800) << 10) + (lo - 0xDC00);
-                            out.push(char::from_u32(cp).unwrap_or('\u{fffd}'));
+                            out.push_char(char::from_u32(cp).unwrap_or('\u{fffd}'));
                         } else {
-                            // Unpaired high surrogate: Rust strings cannot hold it, substitute U+FFFD and
-                            // re-read the second escape on its own.
-                            out.push('\u{fffd}');
+                            // Unpaired high surrogate: preserve raw UTF-16 unit and re-read the second escape.
+                            out.push_surrogate(hi as u16);
                             self.pos = save;
                         }
                     } else {
-                        out.push('\u{fffd}');
+                        out.push_surrogate(hi as u16);
                     }
+                } else if (0xDC00..0xE000).contains(&hi) {
+                    out.push_surrogate(hi as u16);
                 } else {
-                    out.push(char::from_u32(hi).unwrap_or('\u{fffd}'));
+                    out.push_char(char::from_u32(hi).unwrap_or('\u{fffd}'));
                 }
             }
             _ => {

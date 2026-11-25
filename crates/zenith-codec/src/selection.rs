@@ -375,7 +375,7 @@ pub fn parse_option_id_list(value: &str) -> Vec<String> {
 
 /// Formats ids as a JSON array for `options.txt`.
 pub fn format_option_id_list(ids: &[String]) -> String {
-    Json::Array(ids.iter().map(|s| Json::String(s.clone())).collect()).to_json_string()
+    Json::Array(ids.iter().map(|s| Json::string(s.as_str())).collect()).to_json_string()
 }
 
 /// Selects the client's resource packs at startup (spec §4.7), updating `options` as the game would.

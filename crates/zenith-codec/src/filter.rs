@@ -115,7 +115,7 @@ struct RegexCodec;
 impl Codec<JavaRegex> for RegexCodec {
     fn decode(&self, input: &Json) -> DataResult<JavaRegex> {
         match input {
-            Json::String(s) => match JavaRegex::new(s) {
+            Json::String(s) => match JavaRegex::new(&s.to_string_lossy()) {
                 Ok(r) => DataResult::Success(r),
                 Err(m) => DataResult::error(m),
             },
@@ -123,7 +123,7 @@ impl Codec<JavaRegex> for RegexCodec {
         }
     }
     fn encode(&self, value: &JavaRegex) -> DataResult<Json> {
-        DataResult::Success(Json::String(value.source.clone()))
+        DataResult::Success(Json::string(value.source.clone()))
     }
 }
 

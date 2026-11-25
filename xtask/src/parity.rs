@@ -127,7 +127,12 @@ fn world_roots(extra: &[PathBuf]) -> Vec<PathBuf> {
             roots.push(gd.join("saves"));
         }
     }
-    roots.extend(extra.iter().cloned());
+    // Absolute, because game code runs from a cache folder (see `vanilla_command`).
+    roots.extend(
+        extra
+            .iter()
+            .map(|p| std::path::absolute(p).unwrap_or_else(|_| p.clone())),
+    );
     roots.sort();
     roots.dedup();
     roots
@@ -325,7 +330,7 @@ fn vanilla_reference(
         }
         w.flush()?;
     }
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-Xmx4G")
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
@@ -630,7 +635,7 @@ pub fn rng_streams(version: &str, write: bool) -> anyhow::Result<bool> {
     let dir = zenith_install::cache_dir().join("parity/rng-streams");
     fs::create_dir_all(&dir)?;
     let out_file = dir.join("vanilla.bin");
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
         .arg("dev.zenith.oracle.RngStreams")
@@ -837,7 +842,7 @@ pub fn noise_samples(version: &str, write: bool) -> anyhow::Result<bool> {
     let dir = zenith_install::cache_dir().join("parity/noise-samples");
     fs::create_dir_all(&dir)?;
     let out_file = dir.join("vanilla.bin");
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
         .arg("dev.zenith.oracle.NoiseSamples")
@@ -1036,7 +1041,7 @@ pub fn anvil_io(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Result
     let agent = crate::oracle::build(version)?;
     let mut cp = zenith_install::libraries::game_classpath(&install)?;
     cp.push(agent);
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
         .arg("dev.zenith.oracle.RegionCheck")
@@ -1353,7 +1358,7 @@ pub fn math_helpers(version: &str, write: bool) -> anyhow::Result<bool> {
     let dir = zenith_install::cache_dir().join("parity/math-helpers");
     fs::create_dir_all(&dir)?;
     let out_file = dir.join("vanilla.bin");
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
         .arg("dev.zenith.oracle.MathHelpers")
@@ -1411,14 +1416,24 @@ pub fn math_helpers(version: &str, write: bool) -> anyhow::Result<bool> {
     Ok(passed == total)
 }
 
+/// A `java` command for running game code. The game's logger writes a `logs/` folder into the working directory,
+/// so it runs from a cache folder, never the repo.
+fn vanilla_command(java: &std::path::Path) -> anyhow::Result<std::process::Command> {
+    let cwd = zenith_install::cache_dir().join("parity/cwd");
+    fs::create_dir_all(&cwd)?;
+    let mut cmd = std::process::Command::new(java);
+    cmd.current_dir(cwd);
+    Ok(cmd)
+}
+
 // ── datapack-load, stage 1: the JSON layer ───────────────────────────────────
 
 /// Canonical tree dump in UTF-16 units; must match `JsonCheck.canonical` (string lengths are UTF-16 lengths).
 fn json_canonical(j: &zenith_codec::json::Json, out: &mut Vec<u16>) {
     use zenith_codec::json::Json;
     let push = |out: &mut Vec<u16>, s: &str| out.extend(s.encode_utf16());
-    let push_string = |out: &mut Vec<u16>, s: &str| {
-        let units: Vec<u16> = s.encode_utf16().collect();
+    let push_string = |out: &mut Vec<u16>, s: &zenith_codec::json::JsonString| {
+        let units = s.to_utf16();
         out.push(u16::from(b's'));
         out.extend(units.len().to_string().encode_utf16());
         out.push(u16::from(b':'));
@@ -1557,7 +1572,7 @@ fn run_json_check(version: &str, inputs: &[Vec<u8>], mode: &str) -> anyhow::Resu
         buf.extend_from_slice(i);
     }
     fs::write(&corpus, buf)?;
-    let out = std::process::Command::new(&java.java)
+    let out = vanilla_command(&java.java)?
         .arg("-cp")
         .arg(zenith_install::libraries::join_classpath(&cp))
         .arg("dev.zenith.oracle.JsonCheck")

@@ -213,12 +213,12 @@ pub struct StringCodec;
 impl Codec<String> for StringCodec {
     fn decode(&self, input: &Json) -> DataResult<String> {
         match input {
-            Json::String(s) => DataResult::Success(s.clone()),
+            Json::String(s) => DataResult::Success(s.to_string_lossy().into_owned()),
             other => DataResult::error(format!("Not a string: {}", describe(other))),
         }
     }
     fn encode(&self, value: &String) -> DataResult<Json> {
-        DataResult::Success(Json::String(value.clone()))
+        DataResult::Success(Json::string(value.as_str()))
     }
 }
 
@@ -309,15 +309,15 @@ pub struct IdentifierCodec;
 impl Codec<Identifier> for IdentifierCodec {
     fn decode(&self, input: &Json) -> DataResult<Identifier> {
         match input {
-            Json::String(s) => match Identifier::parse(s) {
-                Ok(id) => DataResult::Success(id),
-                Err(_) => DataResult::error(format!("Not a valid resource location: {s}")),
+            Json::String(s) => match s.as_str().map(Identifier::parse) {
+                Some(Ok(id)) => DataResult::Success(id),
+                _ => DataResult::error(format!("Not a valid resource location: {s}")),
             },
             other => DataResult::error(format!("Not a string: {}", describe(other))),
         }
     }
     fn encode(&self, value: &Identifier) -> DataResult<Json> {
-        DataResult::Success(Json::String(value.to_string()))
+        DataResult::Success(Json::string(value.to_string()))
     }
 }
 
@@ -484,7 +484,7 @@ impl<T, C: Codec<T>> Codec<Vec<(String, T)>> for StringMapCodec<C> {
         let mut errors = Vec::new();
         for (k, v) in obj.iter() {
             match self.value.decode(v) {
-                DataResult::Success(t) => good.push((k.to_owned(), t)),
+                DataResult::Success(t) => good.push((k.to_string_lossy().into_owned(), t)),
                 DataResult::Error { message, .. } => {
                     errors.push(format!("Entry {k}: {message}"));
                 }
@@ -631,7 +631,8 @@ pub fn decode_dispatch<T>(
     let Json::String(ty) = ty else {
         return DataResult::error(format!("Not a string: {}", describe(ty)));
     };
-    match variant(ty, input) {
+    let ty_str = ty.to_string_lossy();
+    match variant(&ty_str, input) {
         Some(r) => r,
         None => DataResult::error(format!("Unknown type: {ty}")),
     }

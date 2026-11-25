@@ -640,6 +640,23 @@ means id only; "id/inline" also accepts an inline definition. *holder set* = `#t
 10. **Hashed-stack hash function** (B.5): needs its own protocol spec (hashing of every persistent value shape).
 11. **Client keybind display names** for keybind contents (key names per keyboard layout / mouse buttons) belong to the
     client input spec.
+12. **(implementer) Name-only `profile` re-encoding:** whether a `profile` decoded from a bare player-name string
+    (`"Steve"`) re-encodes as the object form `{"name":"Steve"}` (current implementation) or collapses back to a bare
+    string.
+    **Answered (reader, 2026-11-25):** object form. The profile codec tries the full record form first and accepts a
+    bare name only as an alternative on decode; encoding always uses the full form, so `"Steve"` re-encodes as
+    `{"name":"Steve"}`. The current implementation is correct.
+13. **(implementer) Dedicated per-component network codecs (B.5):** the 7 NBT-backed components and 3 transient
+    components have their wire layouts pinned; the exact per-field binary wire layouts of the remaining complex
+    persistent component types (such as `consumable`, `tool`, `equippable`, `blocks_attacks`, `written_book_content`)
+    belong to the protocol spec and currently round-trip via network NBT.
+14. **(implementer) Sub-discriminator omission on encode:** A.2.1 states encoding never writes `type`; the
+    implementation likewise omits `source` (on `nbt`) and `object` (on `object`) when encoding. Confirm with oracle
+    fixtures whether vanilla omits all three discriminator keys.
+    **Answered (reader, 2026-11-25):** yes, all three. `type`, `source` and `object` are built by the same
+    discriminator helper, whose encoder always writes the compact (keyless) form; the key is only consulted on decode.
+    Exception: with map-compressing ops (none on any 26.3 text path) the keyed form is used for both directions.
+    The current implementation is correct.
 
 ## Reader review (2026-11-25)
 Twelve rules marked **[oracle]** come from the game's bundled serialization and JSON libraries rather than its own

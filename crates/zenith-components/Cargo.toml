@@ -9,6 +9,12 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+zenith-codec = { path = "../zenith-codec" }
+zenith-nbt = { path = "../zenith-nbt" }
+zenith-registry = { path = "../zenith-registry" }
+zenith-data = { path = "../zenith-data" }
+
+[dev-dependencies]
 
 [lints]
 workspace = true

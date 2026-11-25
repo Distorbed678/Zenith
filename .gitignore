@@ -22,3 +22,6 @@ web/.svelte-kit/
 web/build/
 .vite/
 *.tsbuildinfo
+
+# Game logger output if a tool is ever run from the repo root
+/logs/

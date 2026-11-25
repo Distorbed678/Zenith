@@ -27,7 +27,11 @@ fn edge_01_strict_json_but_bom_tolerant_duplicate_keys_last_wins() {
     let v = j("{\"a\":1,\"b\":0,\"a\":2}");
     assert_eq!(v.get("a").unwrap().as_number().unwrap().text(), "2");
     assert_eq!(
-        v.as_object().unwrap().keys().collect::<Vec<_>>(),
+        v.as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.as_str().unwrap())
+            .collect::<Vec<_>>(),
         ["a", "b"]
     );
     assert_eq!(v.as_object().unwrap().len(), 2);
@@ -91,7 +95,11 @@ fn edge_01_strict_json_but_bom_tolerant_duplicate_keys_last_wins() {
     // Key order is preserved.
     let v = j("{\"z\":1,\"a\":2,\"m\":3}");
     assert_eq!(
-        v.as_object().unwrap().keys().collect::<Vec<_>>(),
+        v.as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.as_str().unwrap())
+            .collect::<Vec<_>>(),
         ["z", "a", "m"]
     );
 }
@@ -101,13 +109,74 @@ fn json_string_escapes_decode() {
     assert_eq!(j("\"a\\u00e9\\n\\\"\"").as_str(), Some("a\u{e9}\n\""));
     // A surrogate pair combines.
     assert_eq!(j("\"\\ud83d\\ude00\"").as_str(), Some("\u{1f600}"));
-    // Lone surrogates cannot live in a Rust string and become U+FFFD.
-    assert_eq!(j("\"\\ud83d\"").as_str(), Some("\u{fffd}"));
+    // Lone surrogates are preserved losslessly as raw UTF-16 code units.
+    let lone = j("\"\\ud83d\"");
+    assert_eq!(lone.as_str(), None);
+    assert_eq!(lone.as_json_str().unwrap().to_utf16(), vec![0xD83D]);
+    assert_eq!(lone.as_json_str().unwrap().to_string_lossy(), "\u{fffd}");
     // Raw non-ASCII passes through.
     assert_eq!(
         j("\"h\u{e9}llo \u{1f600}\"").as_str(),
         Some("h\u{e9}llo \u{1f600}")
     );
+}
+
+#[test]
+fn json_unpaired_surrogates_survive_parse_and_reencode() {
+    use zenith_codec::json::JsonString;
+
+    // Lone high surrogate: "\ud800"
+    let hi = j("\"\\ud800\"");
+    assert_eq!(hi.as_json_str().unwrap().to_utf16(), vec![0xD800]);
+    assert_eq!(hi.to_json_string(), "\"\\ud800\"");
+    assert_eq!(j(&hi.to_json_string()), hi);
+
+    // Lone low surrogate followed by ASCII: "\udc00x"
+    let lo_x = j("\"\\udc00x\"");
+    assert_eq!(
+        lo_x.as_json_str().unwrap().to_utf16(),
+        vec![0xDC00, b'x' as u16]
+    );
+    assert_eq!(lo_x.to_json_string(), "\"\\udc00x\"");
+    assert_eq!(j(&lo_x.to_json_string()), lo_x);
+
+    // High surrogate followed by a valid surrogate pair: "\ud800\ud83d\ude00"
+    let mixed = j("\"\\ud800\\ud83d\\ude00\"");
+    assert_eq!(
+        mixed.as_json_str().unwrap().to_utf16(),
+        vec![0xD800, 0xD83D, 0xDE00]
+    );
+    assert_eq!(mixed.to_json_string(), "\"\\ud800\u{1f600}\"");
+    assert_eq!(j(&mixed.to_json_string()), mixed);
+
+    // Unpaired surrogates in object keys and duplicate-key replacement.
+    let obj_val = j("{\"\\ud800\":1,\"\\udc00x\":\"\\ud800\",\"\\ud800\":\"\\udc00x\"}");
+    let obj = obj_val.as_object().unwrap();
+    assert_eq!(obj.len(), 2);
+    let k_hi = JsonString::from_utf16(vec![0xD800]);
+    let k_lo_x = JsonString::from_utf16(vec![0xDC00, b'x' as u16]);
+    assert_eq!(
+        obj.get_key(&k_hi)
+            .unwrap()
+            .as_json_str()
+            .unwrap()
+            .to_utf16(),
+        vec![0xDC00, b'x' as u16]
+    );
+    assert_eq!(
+        obj.get_key(&k_lo_x)
+            .unwrap()
+            .as_json_str()
+            .unwrap()
+            .to_utf16(),
+        vec![0xD800]
+    );
+    let encoded = obj_val.to_json_string();
+    assert_eq!(
+        encoded,
+        "{\"\\ud800\":\"\\udc00x\",\"\\udc00x\":\"\\ud800\"}"
+    );
+    assert_eq!(j(&encoded), obj_val);
 }
 
 #[test]

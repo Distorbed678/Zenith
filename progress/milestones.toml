@@ -150,8 +150,8 @@ tasks = [
   { t = "Codec framework (decode/encode, lenient/strict, error messages)", done = true },
   { t = "Data pack discovery, overlays, pack.mcmeta version ranges", done = true },
   { t = "All vanilla data registries parse from the user's jar", done = false },
-  { t = "Text components (JSON + NBT forms), styles, translation", done = false },
-  { t = "Data components (item component system)", done = false },
+  { t = "Text components (JSON + NBT forms), styles, translation", done = true },
+  { t = "Data components (item component system)", done = true },
 ]
 
 # ───────────────────────────── P2 ─────────────────────────────
