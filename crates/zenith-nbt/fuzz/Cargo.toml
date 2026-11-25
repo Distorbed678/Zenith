@@ -1,0 +1,43 @@
+[package]
+name = "zenith-nbt-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+zenith-nbt = { path = ".." }
+
+[[bin]]
+name = "read_named"
+path = "fuzz_targets/read_named.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_network"
+path = "fuzz_targets/read_network.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "snbt_parse"
+path = "fuzz_targets/snbt_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "roundtrip"
+path = "fuzz_targets/roundtrip.rs"
+test = false
+doc = false
+bench = false

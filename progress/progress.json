@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T00:32:12Z",
+  "generatedAt": "2026-11-25T00:54:30Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 4.1,
-    "parityPercent": 3.2,
+    "percent": 5.2,
+    "parityPercent": 9.7,
     "milestonesDone": 2,
     "milestonesTotal": 33,
-    "suitesPassing": 1,
+    "suitesPassing": 3,
     "suitesTotal": 31
   },
   "phases": [
@@ -28,7 +28,7 @@
       "id": "P1",
       "title": "Core data",
       "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
-      "percent": 23.5,
+      "percent": 32.9,
       "weight": 17.0,
       "milestones": [
         "M1",
@@ -225,13 +225,13 @@
       "title": "NBT & SNBT",
       "status": "in-progress",
       "weight": 2.0,
-      "percent": 0.0,
-      "tasksDone": 0,
+      "percent": 80.0,
+      "tasksDone": 3,
       "tasksTotal": 5,
       "tasks": [
         {
           "title": "Binary NBT read/write (file + network variants)",
-          "done": false
+          "done": true
         },
         {
           "title": "Modified UTF-8 + depth/size limits identical to vanilla",
@@ -243,27 +243,27 @@
         },
         {
           "title": "Fuzz targets (cargo-fuzz)",
-          "done": false
+          "done": true
         },
         {
           "title": "Round-trip every NBT blob in vanilla-generated worlds",
-          "done": false
+          "done": true
         }
       ],
       "suites": [
         {
           "id": "nbt-roundtrip",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 47212,
+          "total": 47212,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         },
         {
           "id": "snbt-format",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 47212,
+          "total": 47212,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1352,8 +1352,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 4.1,
-      "parityPercent": 3.2
+      "percent": 5.2,
+      "parityPercent": 9.7
     }
   ]
 }

@@ -98,3 +98,24 @@ deterministic.
 3. Compounds grown past 12, 24 and 48 entries (resize points), and copies of compounds after removals.
 4. Depth 512 vs 513; quota boundaries hit by both a single large array and many small tags.
 5. Float/double NaN bit patterns and negative zero preserved through round trips.
+
+## Open questions
+1. **Root name accounting in named-root reads:** Does vanilla's `read_named` charge the `Accounter` for the root tag's name string (e.g. `28 + 2 × utf16_len`), or skip/read it uncharged? Current implementation does not charge the root name (matching the table, which only lists the 13 tag types and compound keys).
+2. **All-compound lists containing a wrapper-shaped element:** When a `List` contains only `Compound` elements and one of them already has the wrapper shape (`{ "": value }`), does vanilla wrap that element to `{ "": { "": value } }` on write so unwrapping on read restores the original compound? Current implementation wraps wrapper-shaped compounds whenever the wire list element type is `Compound` (both mixed lists and all-compound lists) to preserve round-trip fidelity.
+3. **Accounting charges for wrapper compounds in binary lists:** When reading a list with wire element type `Compound`, does vanilla charge the full `Compound` overhead (`48 + 28 + 36` + inner payload) and count `+1` nesting depth for each wrapper compound before unwrapping it? Current implementation reads each element as a normal `Compound` (charging and pushing depth) before unwrapping.
+4. **Terminating `End` byte inside compounds:** Confirmed assumption to verify against oracle: the terminating `0` byte at the end of a compound does not charge the standalone `End` (`8`) fee; `End` (`8`) is only charged when `End` appears as a root tag.
+5. **Treeified-bin iteration order:** When a compound bin exceeds 8 colliding entries at capacity ≥ 64, vanilla converts the bin to a red-black tree (`HashMap.TreeNode`), changing in-bin iteration order. Current implementation detects and reports this state (`Error::UnsupportedTreeifiedBin`) rather than silently mis-ordering. Confirm whether parity ever requires reproducing `TreeNode` iteration order.
+
+
+## Answers from the reader (2026-11-25, local reference reading)
+- **Q1 root name accounting:** the root tag's name is skipped without being charged. Only the payload is charged.
+- **Q2 all-compound lists:** yes. Whenever the written element type is Compound (mixed lists *and* lists made only of
+  compounds), any element that has the wrapper shape is wrapped again on write.
+- **Q3 wrapper accounting:** a wrapper is read as an ordinary compound (base charge, key charge, entry charge, one
+  extra depth level), and only then unwrapped. So the charges and depth for wrappers are real.
+- **Q4 compound terminator:** the End byte that closes a compound is not charged. The End charge (8) applies only
+  when an End tag is read as a value.
+- **Q5 treeified bins:** not reachable from vanilla-generated data, but reachable from crafted network input. Keep
+  detection plus a clear error for now. Exact tree-bin order becomes required only if a parity scenario exercises it.
+- **New rule:** a list whose element type is End but whose count is greater than zero is a format error. An End-typed
+  list with count 0 is the normal empty list.

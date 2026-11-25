@@ -102,11 +102,11 @@ weight = 2
 status = "in-progress"
 suites = ["nbt-roundtrip", "snbt-format"]
 tasks = [
-  { t = "Binary NBT read/write (file + network variants)", done = false },
+  { t = "Binary NBT read/write (file + network variants)", done = true },
   { t = "Modified UTF-8 + depth/size limits identical to vanilla", done = false },
   { t = "SNBT parser + printer (vanilla formatting)", done = false },
-  { t = "Fuzz targets (cargo-fuzz)", done = false },
-  { t = "Round-trip every NBT blob in vanilla-generated worlds", done = false },
+  { t = "Fuzz targets (cargo-fuzz)", done = true },
+  { t = "Round-trip every NBT blob in vanilla-generated worlds", done = true },
 ]
 
 [[milestone]]

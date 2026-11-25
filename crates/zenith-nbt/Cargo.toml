@@ -1,0 +1,28 @@
+[package]
+name = "zenith-nbt"
+description = "Clean-room NBT binary codec, Java-order Compound map, SNBT parser/printer, and optional serde integration for Zenith."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror.workspace = true
+flate2.workspace = true
+unicode_names2 = "2"
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

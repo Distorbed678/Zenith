@@ -61,8 +61,8 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 | Suite id | Milestone | What it checks | Corpus |
 |----------|-----------|----------------|--------|
 | `datagen-ingest` | M1 | Ingested tables equal data-gen reports | Every report file |
-| `nbt-roundtrip` | M2 | Read→write→read is identical; bytes identical where vanilla's writer is deterministic | NBT from 20 generated worlds + structure files |
-| `snbt-format` | M2 | SNBT printing/parsing matches vanilla's `/data get` output | 10k random compounds via oracle |
+| `nbt-roundtrip` | M2 | Zenith's read→write of each blob equals **vanilla's own read→write of the same bytes** (not the original file: build-pipeline files were written in a different key order). Rejections must match too | Jar structure templates + oracle worlds + local saves (≈47k blobs, read at run time) |
+| `snbt-format` | M2 | Zenith's single-line SNBT text equals vanilla's `toString()` for every corpus blob (parser: oracle differential fuzzer, pending) | Same corpus as `nbt-roundtrip` |
 | `anvil-io` | M3 | Region read/write, compression modes, vanilla can load our saves | Generated worlds |
 | `registry-ids` | M4 | Every registry entry has the same numeric ID | All registries |
 | `blockstate-ids` | M4 | Every block state ↔ global ID | All states |

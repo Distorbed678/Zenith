@@ -2,6 +2,7 @@
 
 mod guard;
 mod oracle;
+mod parity;
 mod progress;
 mod svg;
 
@@ -30,6 +31,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: OracleCmd,
     },
+    /// Run a file-based parity suite against data vanilla wrote on this machine.
+    Parity {
+        #[command(subcommand)]
+        cmd: ParityCmd,
+    },
     /// Scan the repo for Mojang files, decompiled code and trademark misuse.
     Guard {
         /// Scan only files staged for commit (used by the pre-commit hook).
@@ -44,6 +50,30 @@ enum Cmd {
         /// Skip the hash blocklist and run only the text/name rules.
         #[arg(long)]
         no_hashes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ParityCmd {
+    /// Compare Zenith's SNBT text with vanilla's for every corpus item.
+    SnbtFormat {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        worlds: Vec<PathBuf>,
+        #[arg(long)]
+        write: bool,
+    },
+    /// Read + re-write every NBT blob vanilla wrote (jar structures, oracle worlds, your saves) and compare bytes.
+    NbtRoundtrip {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        /// Extra world folders to include.
+        #[arg(long)]
+        worlds: Vec<PathBuf>,
+        /// Write progress/parity/nbt-roundtrip.json.
+        #[arg(long)]
+        write: bool,
     },
 }
 
@@ -83,6 +113,22 @@ pub fn repo_root() -> PathBuf {
 fn main() -> ExitCode {
     let result = match Cli::parse().cmd {
         Cmd::Progress { check } => progress::run(check),
+        Cmd::Parity {
+            cmd:
+                ParityCmd::SnbtFormat {
+                    version,
+                    worlds,
+                    write,
+                },
+        } => parity::snbt_format(&version, &worlds, write),
+        Cmd::Parity {
+            cmd:
+                ParityCmd::NbtRoundtrip {
+                    version,
+                    worlds,
+                    write,
+                },
+        } => parity::nbt_roundtrip(&version, &worlds, write),
         Cmd::Oracle {
             cmd: OracleCmd::Build { version },
         } => oracle::build(&version).map(|_| true),

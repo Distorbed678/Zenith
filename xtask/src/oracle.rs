@@ -31,7 +31,7 @@ fn eula_marker() -> PathBuf {
         .join("zenith/eula-accepted")
 }
 
-fn install_and_java(version: &str) -> anyhow::Result<(GameInstall, JavaRuntime)> {
+pub(crate) fn install_and_java(version: &str) -> anyhow::Result<(GameInstall, JavaRuntime)> {
     let install = discover_installs(Some(version))
         .into_iter()
         .next()
