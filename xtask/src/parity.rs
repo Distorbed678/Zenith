@@ -304,7 +304,10 @@ pub fn snbt_format(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Res
     }
     let total = items.len() as u64;
     println!("snbt-format {version}: {passed}/{total} identical to vanilla's printed text");
-    let show = std::env::var("ZENITH_PARITY_SHOW").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
+    let show = std::env::var("ZENITH_PARITY_SHOW")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
     for f in failures.iter().take(show) {
         println!("  FAIL {f}");
     }
