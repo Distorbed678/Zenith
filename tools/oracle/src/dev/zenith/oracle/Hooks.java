@@ -18,7 +18,15 @@ public final class Hooks {
     private static Properties names;
     private static boolean halted;
 
+    private static Path chunkRequests;
+    private static Path chunkOut;
+
     private Hooks() {}
+
+    static synchronized void configureChunks(Path requests, Path out) {
+        chunkRequests = requests;
+        chunkOut = out;
+    }
 
     static synchronized void configure(Path out, int ticks, long seed, String version, String scenario, Properties hooks)
             throws IOException {
@@ -37,6 +45,11 @@ public final class Hooks {
             return;
         }
         try {
+            if (chunkRequests != null) {
+                ChunkDump.run(server, chunkRequests, chunkOut);
+                chunkRequests = null;
+                tickLimit = 0; // stop at the end of this tick
+            }
             int tickCount = (Integer) call(server, names.getProperty("server.tickCount"));
             writer.record(tickCount, TICK_END, "server")
                     .i64("tickCount", tickCount)

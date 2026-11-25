@@ -146,6 +146,22 @@ enum ParityCmd {
 
 #[derive(Subcommand)]
 enum OracleCmd {
+    /// Generate chunks in a fresh vanilla world and print a summary of the ZTC1 dump (oracle self-check).
+    Chunks {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long, default_value_t = 12345)]
+        seed: i64,
+        #[arg(long, default_value = "minecraft:normal")]
+        level_type: String,
+        #[arg(long)]
+        structures: bool,
+        /// `dimension:x:z`, e.g. `minecraft:overworld:200:200` (repeatable).
+        #[arg(long = "chunk", required = true)]
+        chunks: Vec<String>,
+        #[arg(long, default_value = "terrain")]
+        status: String,
+    },
     /// Compile the agent jar into tools/oracle/build/.
     Build {
         #[arg(long, default_value = "26.3")]
@@ -231,6 +247,17 @@ fn main() -> ExitCode {
         Cmd::Oracle {
             cmd: OracleCmd::Build { version },
         } => oracle::build(&version).map(|_| true),
+        Cmd::Oracle {
+            cmd:
+                OracleCmd::Chunks {
+                    version,
+                    seed,
+                    level_type,
+                    structures,
+                    chunks,
+                    status,
+                },
+        } => oracle::chunks_command(&version, seed, level_type, structures, &chunks, &status),
         Cmd::Oracle {
             cmd:
                 OracleCmd::Run {

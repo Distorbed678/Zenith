@@ -272,3 +272,312 @@ pub fn run(opts: &RunOptions) -> anyhow::Result<bool> {
     );
     Ok(records > 0)
 }
+
+/// One chunk to dump: dimension id, chunk x, chunk z, and the target status name (e.g. `terrain`).
+#[derive(Clone, Debug)]
+pub struct ChunkRequest {
+    pub dimension: String,
+    pub x: i32,
+    pub z: i32,
+    pub status: String,
+}
+
+/// World options for a chunk dump (server.properties).
+#[derive(Clone, Debug)]
+pub struct ChunkWorld {
+    pub seed: i64,
+    /// World preset: `minecraft:normal`, `minecraft:large_biomes`, `minecraft:amplified`, ...
+    pub level_type: String,
+    pub structures: bool,
+}
+
+/// Generate the requested chunks in the user's own vanilla server and return the raw `ZTC1` dump
+/// (format: docs/specs/parity/terrain-chunks.md). A fresh world is created per call.
+pub fn dump_chunks(
+    version: &str,
+    world: &ChunkWorld,
+    requests: &[ChunkRequest],
+) -> anyhow::Result<Vec<u8>> {
+    if !eula_accepted(false)? {
+        bail!(
+            "the vanilla server only starts after the Minecraft EULA (https://aka.ms/MinecraftEULA) is accepted; \
+             run `cargo xtask oracle run --accept-eula ...` once"
+        );
+    }
+    let (install, java) = install_and_java(version)?;
+    let agent = build(version)?;
+    let cp = game_classpath(&install)?;
+    let run_dir = zenith_install::cache_dir().join("oracle").join(format!(
+        "chunks-{}-{}",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S%3f"),
+        std::process::id()
+    ));
+    fs::create_dir_all(&run_dir)?;
+    fs::write(run_dir.join("eula.txt"), "eula=true\n")?;
+    let mut props = fs::File::create(run_dir.join("server.properties"))?;
+    for (k, v) in [
+        ("online-mode", "false".to_owned()),
+        ("level-seed", world.seed.to_string()),
+        ("level-type", world.level_type.clone()),
+        ("generate-structures", world.structures.to_string()),
+        ("server-port", free_port()?.to_string()),
+        ("view-distance", "3".into()),
+        ("simulation-distance", "3".into()),
+        ("max-tick-time", "-1".into()),
+        ("sync-chunk-writes", "false".into()),
+        ("motd", "Zenith parity oracle".into()),
+    ] {
+        writeln!(props, "{k}={v}")?;
+    }
+    drop(props);
+
+    let mut req = Vec::new();
+    req.extend_from_slice(&u32::try_from(requests.len())?.to_be_bytes());
+    let put_str = |req: &mut Vec<u8>, s: &str| {
+        req.extend_from_slice(&(s.len() as u16).to_be_bytes());
+        req.extend_from_slice(s.as_bytes());
+    };
+    for r in requests {
+        put_str(&mut req, &r.dimension);
+        req.extend_from_slice(&r.x.to_be_bytes());
+        req.extend_from_slice(&r.z.to_be_bytes());
+        put_str(&mut req, &r.status);
+    }
+    let (req_file, out_file, dump) = (
+        run_dir.join("chunks.in"),
+        run_dir.join("chunks.out"),
+        run_dir.join("ticks.zpd"),
+    );
+    fs::write(&req_file, req)?;
+    let agent_args = format!(
+        "out={},ticks=1,seed={},version={version},chunks={},chunks_out={}",
+        dump.display(),
+        world.seed,
+        req_file.display(),
+        out_file.display()
+    );
+    let log = fs::File::create(run_dir.join("server.log"))?;
+    let started = Instant::now();
+    let mut child = Command::new(&java.java)
+        .arg("-Xmx3G")
+        .arg(format!("-javaagent:{}={agent_args}", agent.display()))
+        .arg("-cp")
+        .arg(join_classpath(&cp))
+        .arg(SERVER_MAIN)
+        .args(["--nogui", "--universe", "worlds", "--world", "oracle"])
+        .current_dir(&run_dir)
+        .stdin(Stdio::null())
+        .stdout(log.try_clone()?)
+        .stderr(log)
+        .spawn()
+        .context("start vanilla server")?;
+    let timeout = Duration::from_secs(600 + 5 * requests.len() as u64);
+    let status = loop {
+        if let Some(s) = child.try_wait()? {
+            break s;
+        }
+        if started.elapsed() > timeout {
+            let _ = child.kill();
+            bail!(
+                "server did not finish within {}s; see {}",
+                timeout.as_secs(),
+                run_dir.join("server.log").display()
+            );
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    };
+    let raw = fs::read(&out_file).with_context(|| {
+        format!(
+            "no chunk dump written (server exit {status}); see {}",
+            run_dir.join("server.log").display()
+        )
+    })?;
+    // The world and dump contain game-generated data: keep nothing in the cache once read.
+    let _ = fs::remove_dir_all(&run_dir);
+    Ok(raw)
+}
+
+/// One chunk of a `ZTC1` dump.
+#[derive(Clone, Debug)]
+pub struct DumpedChunk {
+    pub dimension: String,
+    pub x: i32,
+    pub z: i32,
+    pub requested: String,
+    pub reached: String,
+    pub min_y: i32,
+    pub height: i32,
+    /// Global block-state ids; sections bottom-up, inside a section index `(y * 16 + z) * 16 + x`.
+    pub blocks: Vec<u32>,
+    /// Biome ids per section, 64 each in `(qy, qz, qx)` order.
+    pub biomes: Vec<String>,
+    /// Heightmap serialization name → 256 first-available heights in `(z, x)` order.
+    pub heightmaps: Vec<(String, Vec<i32>)>,
+    /// (section index, packed local offset) in list order.
+    pub post_processing: Vec<(i32, u16)>,
+    pub block_ticks: i32,
+    pub fluid_ticks: i32,
+}
+
+/// Parse a `ZTC1` dump (docs/specs/parity/terrain-chunks.md).
+pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
+    struct R<'a>(&'a [u8], usize);
+    impl R<'_> {
+        fn take(&mut self, n: usize) -> anyhow::Result<&[u8]> {
+            let b = self
+                .0
+                .get(self.1..self.1 + n)
+                .context("truncated ZTC1 dump")?;
+            self.1 += n;
+            Ok(b)
+        }
+        fn u16(&mut self) -> anyhow::Result<u16> {
+            Ok(u16::from_be_bytes(self.take(2)?.try_into()?))
+        }
+        fn i32(&mut self) -> anyhow::Result<i32> {
+            Ok(i32::from_be_bytes(self.take(4)?.try_into()?))
+        }
+        fn str(&mut self) -> anyhow::Result<String> {
+            let n = self.u16()? as usize;
+            Ok(String::from_utf8(self.take(n)?.to_vec())?)
+        }
+    }
+    let mut r = R(raw, 0);
+    ensure!(r.take(4)? == b"ZTC1", "not a ZTC1 dump");
+    let n = r.i32()?;
+    let mut chunks = Vec::with_capacity(n.max(0) as usize);
+    for _ in 0..n {
+        let (dimension, x, z) = (r.str()?, r.i32()?, r.i32()?);
+        let (requested, reached) = (r.str()?, r.str()?);
+        let (min_y, height, sections) = (r.i32()?, r.i32()?, r.i32()? as usize);
+        let blocks = (0..sections * 4096)
+            .map(|_| r.i32().map(|v| v as u32))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let table = (0..r.u16()?)
+            .map(|_| r.str())
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let biomes = (0..sections * 64)
+            .map(|_| {
+                let i = r.u16()? as usize;
+                table.get(i).cloned().context("biome index out of range")
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let maps = r.take(1)?[0];
+        let mut heightmaps = Vec::new();
+        for _ in 0..maps {
+            let name = r.str()?;
+            let h = (0..256)
+                .map(|_| r.i32())
+                .collect::<anyhow::Result<Vec<_>>>()?;
+            heightmaps.push((name, h));
+        }
+        let marks = r.i32()?;
+        let post_processing = (0..marks)
+            .map(|_| Ok((r.i32()?, r.u16()?)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let (block_ticks, fluid_ticks) = (r.i32()?, r.i32()?);
+        chunks.push(DumpedChunk {
+            dimension,
+            x,
+            z,
+            requested,
+            reached,
+            min_y,
+            height,
+            blocks,
+            biomes,
+            heightmaps,
+            post_processing,
+            block_ticks,
+            fluid_ticks,
+        });
+    }
+    ensure!(r.1 == raw.len(), "trailing bytes in ZTC1 dump");
+    Ok(chunks)
+}
+
+/// `cargo xtask oracle chunks`: dump chunks and print per-chunk statistics (block histogram, heights).
+pub fn chunks_command(
+    version: &str,
+    seed: i64,
+    level_type: String,
+    structures: bool,
+    specs: &[String],
+    status: &str,
+) -> anyhow::Result<bool> {
+    let mut requests = Vec::new();
+    for s in specs {
+        let (dim, rest) = s
+            .rsplit_once(':')
+            .and_then(|(a, z)| a.rsplit_once(':').map(|(d, x)| (d, (x, z))))
+            .with_context(|| format!("bad --chunk {s}; use dimension:x:z"))?;
+        requests.push(ChunkRequest {
+            dimension: dim.to_owned(),
+            x: rest.0.parse()?,
+            z: rest.1.parse()?,
+            status: status.to_owned(),
+        });
+    }
+    let world = ChunkWorld {
+        seed,
+        level_type,
+        structures,
+    };
+    let started = Instant::now();
+    let chunks = parse_chunk_dump(&dump_chunks(version, &world, &requests)?)?;
+    let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
+        .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
+    let table = zenith_registry::block_state::BlockStateTable::from_tables(&tables)
+        .map_err(|e| anyhow::anyhow!("block-state table: {e}"))?;
+    let mut names = vec![String::new(); table.len()];
+    for b in table.blocks() {
+        for s in b.first_state..b.first_state + b.state_count {
+            names[s as usize] = b.id.to_string();
+        }
+    }
+    println!(
+        "{} chunks in {:.1}s",
+        chunks.len(),
+        started.elapsed().as_secs_f64()
+    );
+    for c in &chunks {
+        let mut hist: std::collections::BTreeMap<&str, u32> = std::collections::BTreeMap::new();
+        for &b in &c.blocks {
+            *hist
+                .entry(names.get(b as usize).map_or("?", String::as_str))
+                .or_default() += 1;
+        }
+        let mut top: Vec<_> = hist.into_iter().collect();
+        top.sort_by_key(|e| std::cmp::Reverse(e.1));
+        let bottom = names.get(c.blocks[0] as usize).map_or("?", String::as_str);
+        let mut biomes: Vec<&str> = c.biomes.iter().map(String::as_str).collect();
+        biomes.dedup();
+        biomes.sort_unstable();
+        biomes.dedup();
+        println!(
+            "{} ({},{}) {} -> {}: y {}..{}, bottom {bottom}, post-processing {}, ticks {}/{}\n  blocks: {}\n  biomes: {}\n  heightmaps: {}",
+            c.dimension,
+            c.x,
+            c.z,
+            c.requested,
+            c.reached,
+            c.min_y,
+            c.min_y + c.height,
+            c.post_processing.len(),
+            c.block_ticks,
+            c.fluid_ticks,
+            top.iter()
+                .take(8)
+                .map(|(n, k)| format!("{n} {k}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            biomes.join(", "),
+            c.heightmaps
+                .iter()
+                .map(|(n, h)| format!("{n}[0]={}", h[0]))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    Ok(!chunks.is_empty())
+}

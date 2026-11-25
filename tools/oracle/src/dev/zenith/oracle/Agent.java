@@ -11,7 +11,9 @@ import java.util.Properties;
 
 /**
  * Java agent entry point. Arguments: comma-separated {@code key=value} pairs:
- * {@code out} (dump path), {@code ticks} (stop after this many), {@code seed}, {@code version}, {@code scenario}.
+ * {@code out} (dump path), {@code ticks} (stop after this many), {@code seed}, {@code version}, {@code scenario}, and
+ * optionally {@code chunks} + {@code chunks_out} (dump requested chunks on the first tick, then stop; see
+ * {@link ChunkDump}).
  */
 public final class Agent {
     private Agent() {}
@@ -28,6 +30,10 @@ public final class Agent {
                 version,
                 opts.getOrDefault("scenario", "tick-baseline"),
                 hooks);
+
+        if (opts.containsKey("chunks")) {
+            Hooks.configureChunks(Path.of(opts.get("chunks")), Path.of(require(opts, "chunks_out")));
+        }
 
         inst.addTransformer(new TickTransformer(
                 hooks.getProperty("tick.class"),
