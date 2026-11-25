@@ -66,13 +66,13 @@ Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 | **M4** Registries, identifiers & tags | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Identifier type + validation rules<br>☐ Static + dynamic registries with vanilla numeric IDs<br>☐ Block states & properties with identical global state IDs<br>☐ Tag loading + resolution order<br>☐ Feature flags | `registry-ids` 0/0<br>`blockstate-ids` 0/0 |
 | **M5** Codecs, data packs & text components | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Codec framework (decode/encode, lenient/strict, error messages)<br>☐ Data pack discovery, overlays, pack.mcmeta version ranges<br>☐ All vanilla data registries parse from the user's jar<br>☐ Text components (JSON + NBT forms), styles, translation<br>☐ Data components (item component system) | `datapack-load` 0/0<br>`text-component` 0/0 |
 
-#### P2 World simulation: 0.9%
+#### P2 World simulation: 1.8%
 
 RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.
 
 | Milestone | Status | Progress | Tasks | Parity suites |
 |---|---|---|---|---|
-| **M6** Math, RNG & noise primitives | 🟡 In progress | `▰▰▰▱▱▱▱▱▱▱` 25% | ☑ Java LCG Random + Xoroshiro128++ + positional factories<br>☐ Java-exact float/double math helpers (sin table, floor, lerp…)<br>☐ Improved/Perlin, Simplex, Blended and Normal noise<br>☑ Seed hashing identical to vanilla | `rng-streams` 0/0<br>`noise-samples` 0/0 |
+| **M6** Math, RNG & noise primitives | 🟡 In progress | `▰▰▰▰▰▱▱▱▱▱` 50% | ☑ Java LCG Random + Xoroshiro128++ + positional factories<br>☐ Java-exact float/double math helpers (sin table, floor, lerp…)<br>☐ Improved/Perlin, Simplex, Blended and Normal noise<br>☑ Seed hashing identical to vanilla | `rng-streams` 38594/38594<br>`noise-samples` 0/0 |
 | **M7** Terrain generation | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Density functions + noise router<br>☐ Multi-noise biome source + climate sampler<br>☐ Aquifers, ore veins, noodle caves<br>☐ Surface rules<br>☐ Carvers<br>☐ Golden diff: 10k chunks × 50 seeds, all dimensions | `golden-terrain` 0/0 |
 | **M8** Features & structures | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Configured/placed features + placement modifiers<br>☐ Decoration step ordering<br>☐ Structure sets, placement, jigsaw assembly<br>☐ Structure templates loaded from the user's jar<br>☐ Golden diff incl. block entities & entities | `golden-features` 0/0<br>`golden-structures` 0/0 |
 | **M9** Lighting | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Block + sky light propagation, identical queue order<br>☐ Light during worldgen + updates<br>☐ Deterministic parallel lighting (same result) | `light-engine` 0/0 |

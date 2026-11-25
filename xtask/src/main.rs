@@ -55,6 +55,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Compare zenith-math's random sources with vanilla's over a fixed script of operations.
+    RngStreams {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Compare Zenith's SNBT text with vanilla's for every corpus item.
     SnbtFormat {
         #[arg(long, default_value = "26.3")]
@@ -113,6 +120,9 @@ pub fn repo_root() -> PathBuf {
 fn main() -> ExitCode {
     let result = match Cli::parse().cmd {
         Cmd::Progress { check } => progress::run(check),
+        Cmd::Parity {
+            cmd: ParityCmd::RngStreams { version, write },
+        } => parity::rng_streams(&version, write),
         Cmd::Parity {
             cmd:
                 ParityCmd::SnbtFormat {

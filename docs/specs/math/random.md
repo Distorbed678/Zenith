@@ -98,3 +98,8 @@ first. Setting the seed clears the cache.
   shared default for every source; xoroshiro's own version does n raw steps.)
 - **Q3 (positional factory zero state):** the factory stores (L, H) as given. The all-zero replacement happens only when
   a generator is constructed, so `at`/`fromSeed` results that come out as (0, 0) become (G, S) at that point.
+
+## Parity status (2026-11-25)
+`rng-streams`: **38,594/38,594** values identical to vanilla 26.3 on the reference machine (Linux x86_64, HotSpot
+25). This includes 3,488 Gaussian samples, so on this platform `Math.log` and fdlibm-style `ln` agree bit for bit.
+CI repeats the check on the other platforms.

@@ -1418,6 +1418,7 @@ dependencies = [
  "toml",
  "ureq",
  "zenith-install",
+ "zenith-math",
  "zenith-nbt",
  "zenith-parity",
  "zip",

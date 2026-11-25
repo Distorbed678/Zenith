@@ -21,6 +21,7 @@ clap.workspace = true
 zenith-install = { path = "../crates/zenith-install" }
 zenith-parity = { path = "../crates/zenith-parity" }
 zenith-nbt = { path = "../crates/zenith-nbt" }
+zenith-math = { path = "../crates/zenith-math" }
 flate2.workspace = true
 
 [lints]
