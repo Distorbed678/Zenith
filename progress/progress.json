@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T16:08:43Z",
+  "generatedAt": "2026-11-25T16:24:50Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 17.0,
+      "percent": 17.1,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -469,9 +469,9 @@
       "title": "Terrain generation",
       "status": "in-progress",
       "weight": 8.0,
-      "percent": 93.8,
-      "tasksDone": 7,
-      "tasksTotal": 8,
+      "percent": 94.4,
+      "tasksDone": 8,
+      "tasksTotal": 9,
       "tasks": [
         {
           "title": "Density functions + noise router",
@@ -502,7 +502,11 @@
           "done": true
         },
         {
-          "title": "Golden diff at scale (12 seeds × 1,966 chunks: 3 surface mismatches open); target 10k chunks × 50 seeds",
+          "title": "Golden diff at scale: 24 seeds × 5,854 chunks identical",
+          "done": true
+        },
+        {
+          "title": "Full soak run: 10k chunks × 50 seeds, all dimensions",
           "done": false
         }
       ],

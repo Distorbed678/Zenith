@@ -186,7 +186,8 @@ tasks = [
   { t = "Ore veins (material rule), noodle caves", done = true },
   { t = "Surface rules", done = true },
   { t = "Carvers", done = true },
-  { t = "Golden diff at scale (12 seeds × 1,966 chunks: 3 surface mismatches open); target 10k chunks × 50 seeds", done = false },
+  { t = "Golden diff at scale: 24 seeds × 5,854 chunks identical", done = true },
+  { t = "Full soak run: 10k chunks × 50 seeds, all dimensions", done = false },
 ]
 
 [[milestone]]

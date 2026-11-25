@@ -1190,59 +1190,66 @@ impl TerrainGenerator {
                 }
             }
             BiomeSource::MultiNoise(src) => {
-                // Sample all 6 climate channels over the stride-4 6 × qh × 6 volume in one batch.
-                let vol = DensityVolume::new(
-                    [6, qh, 6],
-                    [min_quart_x << 2, min_y, min_quart_z << 2],
-                    [4, 4, 4],
-                )
-                .expect("6xqh x6 climate volume is valid");
-                let channels = rs.sample_climate_volume(vol);
-                let climate_vol =
-                    ClimateVolume::new(min_quart_x, min_quart_y, min_quart_z, 6, qh, 6, channels)
-                        .expect("climate volume dimensions match");
-
+                // The zoom reads each neighbour's STORED biomes (biomes-and-climate.md §4, stored-biome reads),
+                // so every chunk of the 3 × 3 neighbourhood is computed exactly as its own biomes step does:
+                // its own 4 × qh × 4 stride-4 climate volume, a fresh search state and the fill order below.
+                // A single shared volume would differ by an ulp at some boundaries (volume values depend on the
+                // volume's origin).
                 let param_list = src.parameter_list();
-                // 1. Center chunk stored biomes in exact vanilla fill_chunk_biomes order:
-                // section ascending, lx outer, ly middle, lz inner, fresh SearchState.
-                let mut state = SearchState::new();
-                let center_qx0 = chunk_x << 2;
-                let center_qz0 = chunk_z << 2;
-                for sec in 0..section_count {
-                    let sec_qy0 = min_quart_y + (sec as i32) * 4;
-                    for lx in 0..4usize {
-                        let qx = center_qx0 + lx as i32;
-                        for ly in 0..4usize {
-                            let qy = sec_qy0 + ly as i32;
-                            let gy = sec * 4 + ly;
-                            for lz in 0..4usize {
-                                let qz = center_qz0 + lz as i32;
-                                let target = climate_vol.sample(qx, qy, qz);
-                                let id = param_list.find_value(target, &mut state);
-                                let bid = lookup_id(id);
-                                possible.insert(bid);
-                                stored_bids[sec * 64 + section_biome_index(lx, ly, lz)] = bid;
-                                grid[(gy * 6 + (lz + 1)) * 6 + (lx + 1)] = bid;
+                let stored_for = |cx: i32, cz: i32| -> Vec<BiomeId> {
+                    let vol = DensityVolume::new([4, qh, 4], [cx << 4, min_y, cz << 4], [4, 4, 4])
+                        .expect("4 x qh x 4 climate volume is valid");
+                    let channels = rs.sample_climate_volume(vol);
+                    let climate_vol =
+                        ClimateVolume::new(cx << 2, min_quart_y, cz << 2, 4, qh, 4, channels)
+                            .expect("climate volume dimensions match");
+                    let mut state = SearchState::new();
+                    let mut out = vec![BiomeId(0); section_count * 64];
+                    // Section ascending, lx outer, ly middle, lz inner.
+                    for sec in 0..section_count {
+                        let sec_qy0 = min_quart_y + (sec as i32) * 4;
+                        for lx in 0..4usize {
+                            for ly in 0..4usize {
+                                for lz in 0..4usize {
+                                    let target = climate_vol.sample(
+                                        (cx << 2) + lx as i32,
+                                        sec_qy0 + ly as i32,
+                                        (cz << 2) + lz as i32,
+                                    );
+                                    out[sec * 64 + section_biome_index(lx, ly, lz)] =
+                                        lookup_id(param_list.find_value(target, &mut state));
+                                }
                             }
                         }
                     }
-                }
-
-                // 2. Fill the 20 border (gx, gz) quart columns.
-                for gx in 0..6usize {
-                    let qx = min_quart_x + gx as i32;
-                    for gz in 0..6usize {
-                        if (1..=4).contains(&gx) && (1..=4).contains(&gz) {
-                            continue;
+                    out
+                };
+                for dx in -1..=1_i32 {
+                    for dz in -1..=1_i32 {
+                        let stored = stored_for(chunk_x + dx, chunk_z + dz);
+                        // Possible biomes: every stored biome of the 3 × 3 chunks.
+                        for &b in &stored {
+                            possible.insert(b);
                         }
-                        let qz = min_quart_z + gz as i32;
-                        for gy in 0..qh {
-                            let qy = min_quart_y + gy as i32;
-                            let target = climate_vol.sample(qx, qy, qz);
-                            let id = param_list.find_value(target, &mut state);
-                            let bid = lookup_id(id);
-                            possible.insert(bid);
-                            grid[(gy * 6 + gz) * 6 + gx] = bid;
+                        if dx == 0 && dz == 0 {
+                            stored_bids.copy_from_slice(&stored);
+                        }
+                        // Copy the part of this chunk that lies inside the 6 × 6 quart window.
+                        for lx in 0..4usize {
+                            let gx = dx * 4 + lx as i32 + 1;
+                            if !(0..6).contains(&gx) {
+                                continue;
+                            }
+                            for lz in 0..4usize {
+                                let gz = dz * 4 + lz as i32 + 1;
+                                if !(0..6).contains(&gz) {
+                                    continue;
+                                }
+                                for gy in 0..qh {
+                                    grid[(gy * 6 + gz as usize) * 6 + gx as usize] =
+                                        stored[(gy / 4) * 64 + section_biome_index(lx, gy % 4, lz)];
+                                }
+                            }
                         }
                     }
                 }

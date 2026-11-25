@@ -669,6 +669,6 @@ Public classes and methods a black-box parity tool can call to dump intermediate
 `golden-terrain` (full chunks after the terrain step, structures off): **1,320/1,320** checks identical on the default
 corpus (132 chunks: 3 seeds × normal overworld + nether + end, large-biomes and amplified overworlds, including 2×2
 adjacent blocks, far chunks and targeted eroded-badlands, frozen-ocean, sulfur-caves and peak chunks).
-Scaled run (`ZENITH_GOLDEN_SEEDS=12 ZENITH_GOLDEN_RANDOM=24`, 1,966 chunks, 2026-11-25): **19,657/19,660**. Three chunks
-differ in one surface block each (windswept gravelly hills: gravel vs dirt at y 75; amplified dripstone caves: dirt vs
-stone at y 156; nether soul-sand valley: netherrack vs soul soil at y 2) — under investigation.
+Scaled run (`ZENITH_GOLDEN_SEEDS=24 ZENITH_GOLDEN_RANDOM=40`, 2026-11-25): **58,540/58,540** identical over 5,854
+chunks. An earlier 1,966-chunk run found 3 edge-of-chunk surface blocks that differed because the neighbourhood biomes
+came from one shared climate volume instead of each neighbour's own (now `biomes-and-climate.md` edge case 6a).

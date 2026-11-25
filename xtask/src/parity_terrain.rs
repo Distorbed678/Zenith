@@ -1212,10 +1212,31 @@ fn golden_terrain_job(
                     let biome = zc
                         .biome_at_quart(lx >> 2, (sec * 16 + ly) >> 2, lz >> 2)
                         .map_or_else(|| "?".to_owned(), ToString::to_string);
+                    // Every differing block (first 16 listed) to tell isolated boundary cases from systematic ones.
+                    let diffs: Vec<String> = dc
+                        .blocks
+                        .iter()
+                        .zip(zc.blocks())
+                        .enumerate()
+                        .filter(|(_, (a, b))| a != b)
+                        .map(|(i, (a, b))| {
+                            let (sec, rem) = (i / 4096, i % 4096);
+                            format!(
+                                "({},{},{}) {}→{}",
+                                (dc.x << 4) + (rem % 16) as i32,
+                                dc.min_y + (sec * 16 + rem / 256) as i32,
+                                (dc.z << 4) + ((rem % 256) / 16) as i32,
+                                describe_state(&ctx.blocks, *a),
+                                describe_state(&ctx.blocks, *b)
+                            )
+                        })
+                        .collect();
                     format!(
-                        "{tag} blocks: first diff at ({wx},{wy},{wz}) [biome {biome}]: vanilla {} | zenith {}",
+                        "{tag} blocks: first diff at ({wx},{wy},{wz}) [biome {biome}]: vanilla {} | zenith {}; {} blocks differ: {}",
                         describe_state(&ctx.blocks, dc.blocks[idx]),
                         describe_state(&ctx.blocks, zc.blocks()[idx]),
+                        diffs.len(),
+                        diffs.iter().take(16).cloned().collect::<Vec<_>>().join(", ")
                     )
                 }
                 None => format!(
@@ -1348,8 +1369,16 @@ pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     // One vanilla server per (seed, world type); `oracle::dump_chunks` is safe to call in parallel.
     let mut jobs: Vec<Job<'_>> = Vec::new();
+    // Debug filter: ZENITH_GOLDEN_ONLY="<seed>:<preset>" runs a single world.
+    let only = std::env::var("ZENITH_GOLDEN_ONLY").ok();
     for &seed in &seeds {
         for preset in ["normal", "large_biomes", "amplified"] {
+            if only
+                .as_ref()
+                .is_some_and(|o| *o != format!("{seed}:{preset}"))
+            {
+                continue;
+            }
             let (ctx, timing) = (&ctx, &timing);
             jobs.push(Box::new(move || {
                 golden_terrain_job(ctx, version, seed, preset, timing)

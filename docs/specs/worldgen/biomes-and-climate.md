@@ -646,6 +646,13 @@ Total Overworld entries: $22 + 7{,}568 + 4 = 7{,}594$.
 3. **R-tree `build` in-place stable sort + `totalMagnitude` tie preservation**: During split selection, `nodes` is sorted in place by cyclic signed midpoint (`(min + max) /_trunc 2`, truncating toward zero) for `d = 0..6`. Each `buckets` snapshot copies slices before `d + 1` re-sorts `nodes`. When `build` later reaches `len <= 19` and stably sorts by `totalMagnitude`, ties preserve the order from the parent's `bestDim` sort (or original list order when $N \le 19$ at the root).
 4. **R-tree `lastResult` warm-start wins distance ties**: `SubTree::search` uses strict `>` (`minDist > childDist` and `minDist > leafDist`), so `lastResult` beats any equally distant leaf regardless of tree order, and among other ties the first leaf in depth-first tree order wins.
 5. **Chunk fill loop order is X → Y → Z while container storage is Y → Z → X**: `LevelChunkSection::fillBiomesFromNoise` queries `x` outer, `y` middle, `z` inner (which determines `lastResult` progression across the 64 quarts), while `PalettedContainer` stores entries at `((y << 2) | z) << 2 | x`.
+6a. **Neighbour biomes must come from each neighbour's own volume** (settled by the scaled `golden-terrain` run,
+   2026-11-25): a climate value sampled through the volume path can depend on the volume's origin and shape, not only
+   on the position. When the terrain step reads biomes of the radius-1 neighbour chunks (the surface zoom near a chunk
+   edge, the possible-biome set), each neighbour's stored biomes must be exactly what *that chunk's* biomes step
+   produced: its own `4 × (height/4) × 4` stride-4 volume at its own origin, a fresh search state, its fill order. A
+   single shared volume covering the neighbourhood flips the biome at rare boundary quarts (3 surface blocks in 1,966
+   chunks before the fix).
 6. **Multi-noise `createResolverForChunk` uses `sampleVolume`, not `sampleValue`**: Chunk biome generation uses `DensitySampler.Bound::sampleVolume` over a stride-4 `DensityVolume`, whereas uncached queries and carvers use `sampleValue`. Non-dyadic noise frequencies can differ by 1 ULP between volume and point paths (see `docs/specs/math/noise.md` §5).
 7. **Multi-noise `mapEither` prefers `"biomes"` over `"preset"`**: If a JSON object specifies both `"biomes"` and `"preset"`, `"biomes"` decodes first and `"preset"` is ignored.
 8. **`BiomeManager::obfuscateSeed` is little-endian on BOTH input and output**: The 64-bit world seed is encoded as 8 little-endian bytes before SHA-256, and the first 8 digest bytes are decoded as a little-endian signed `i64`.
