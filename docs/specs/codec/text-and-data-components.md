@@ -42,6 +42,7 @@ removals, and on the network as counted lists of typed values. 26.3 defines 122 
   `en_us`; dedicated server: built-in `en_us` only), the client key-binding table (keybind contents), and, for
   resolution only, a command source (level, executing entity, position, permission) and the scoreboard / command
   storage.
+- **Registry context used when decoding** (A.6.4): which registries are available to check references by id.
 
 ## A.2 Content types
 
@@ -85,11 +86,13 @@ Per-kind validation and details:
 - **`selector` / `entity` source** — must parse completely with the entity-selector grammar (selectors allowed), else
   the component fails with an "invalid selector" error.
 - **`nbt` path** — must parse completely with the command NBT-path grammar. `interpret` and `plain` both true is a
-  decode error. Data sources: `entity` (selector string), `block` (block-position argument string, relative and local
+  decode error. Parsing reads nodes until the end of the string or a space; anything left (a space and whatever
+  follows) is a "trailing data" error. So the **empty path `""` is valid**: it has zero nodes and selects the source's
+  root tag itself, while `" a"` and `"a b"` fail. Data sources: `entity` (selector string), `block` (block-position argument string, relative and local
   coordinates allowed), `storage` (identifier).
 - **`object` info.**
-  - `atlas`: **`sprite`** identifier; `atlas` identifier, default `minecraft:blocks` (omitted on encode when equal to
-    the default). Default fallback text: `[<sprite>]` when the atlas is `minecraft:blocks`, else
+  - `atlas`: `atlas` identifier, default `minecraft:blocks` (omitted on encode when equal to the default); **`sprite`**
+    identifier. Encoding writes `atlas` (when present) before `sprite`. Default fallback text: `[<sprite>]` when the atlas is `minecraft:blocks`, else
     `[<sprite>@<atlas>]`, where each identifier is printed without its namespace when the namespace is `minecraft`.
   - `player`: **`player`** profile (same shape as the `profile` item component, B.7); `hat` bool, default true
     (omitted when true). Default fallback text: `[<name> head]`, or `[unknown player head]` when the profile has no
@@ -139,7 +142,7 @@ recognised — they are unknown keys and are silently ignored, leaving no click 
 | `open_file` | **`path`** | **never accepted in serialized data**: decoding and encoding both fail ("not allowed"). Exists only in-memory on the client (e.g. screenshot messages) |
 | `run_command` | **`command`** | every UTF-16 unit must be a chat-safe character: not `§` (U+00A7), not below U+0020, not U+007F |
 | `suggest_command` | **`command`** | same as `run_command` |
-| `show_dialog` | **`dialog`** | a dialog identifier, or an inline dialog definition |
+| `show_dialog` | **`dialog`** | an inline dialog definition (decodes in any context; its schema, defaults and key order belong to the future dialog spec, so inline dialogs are a **known gap** of the `text-component` suite, 2 cases), or a dialog identifier, which must name an entry of the dialog registry and so needs registry context (A.6.4); without it, an identifier always fails |
 | `change_page` | **`page`** | integer ≥ 1 |
 | `copy_to_clipboard` | **`value`** | any string |
 | `custom` | **`id`** identifier; `payload` any NBT value (optional) | in JSON the payload is converted to NBT |
@@ -151,8 +154,8 @@ Action names are case-sensitive.
 | `action` | Fields | Notes |
 |---|---|---|
 | `show_text` | **`value`**: component | resolved during server-side resolution (A.9) |
-| `show_item` | **`id`**: item id (not `minecraft:air`); `count`: 1…99, default 1 (omitted when 1); `components`: component patch (B.4) | the item fields are inline in the hover object |
-| `show_entity` | **`id`**: entity type id; **`uuid`**: four-integer array or hyphenated UUID string; `name`: component | tooltip lines: the name (if any), then `gui.entity_tooltip.type` with the type's name, then the UUID in lower-case hyphenated form |
+| `show_item` | **`id`**: a registered item id (not `minecraft:air`; an unknown id fails); `count`: 1…99, default 1 (omitted when 1); `components`: component patch (B.4) | the item fields are inline in the hover object |
+| `show_entity` | **`id`**: a registered entity type id (an unknown id fails); **`uuid`**: four-integer array or hyphenated UUID string; `name`: component | tooltip lines: the name (if any), then `gui.entity_tooltip.type` with the type's name, then the UUID in lower-case hyphenated form |
 
 The old `contents` key is not recognised.
 
@@ -176,10 +179,11 @@ The old `contents` key is not recognised.
 8. **NBT specifics.** Strings must be string tags (a number never decodes as a string). Booleans accept *any numeric
    tag* and are true iff the value is non-zero when read as a double (`1b`, `5`, `0.5f` are true; `0`, `0.0d` false;
    a string `"true"` fails). Lists may be heterogeneous (strings mixed with compounds) per `nbt/binary-format.md`.
-9. **JSON specifics.** JSON numbers are not accepted where a string is expected. JSON booleans are accepted where a
-   boolean is expected; JSON numbers are accepted as booleans by the library's number→boolean rule **[oracle]**
-   (believed: true iff the value's low 8 bits are non-zero, which differs from NBT for e.g. `256`). JSON documents
-   nested deeper than Gson's default nesting limit (255) fail to parse **[oracle]**.
+9. **JSON specifics.** JSON numbers are not accepted where a string is expected. Where a boolean is expected only
+   JSON `true` / `false` are accepted; **a JSON number is rejected** (`"bold": 1` fails the component). This differs
+   from NBT (rule 8), where numbers are the only booleans. *(Settled by the `text-component` suite, 2026-11-25.)*
+   JSON documents nested deeper than the parser's limit fail to parse (opening a 256th nested container fails, see
+   `datapacks-and-codecs.md`).
 
 ### A.6.2 Encoding
 
@@ -187,8 +191,15 @@ The old `contents` key is not recognised.
 2. Otherwise a **map**: the content's own fields (no `type`), then `extra` (only if there are siblings), then each
    *set* style field. Optional fields equal to their default are omitted (A.2.2, A.3.1).
 3. The list form is never produced by encoding.
-4. Key order in JSON output, and therefore exact JSON text, is pinned by oracle fixtures **[oracle]**; NBT compounds
-   carry no meaningful order (SNBT printing sorts keys, see `nbt/snbt.md`).
+4. **Key order in JSON output** (settled by the `text-component` suite, 2026-11-25): fields are written in the order
+   listed for each type in this spec, with two rules that override it:
+   - **Dispatched objects write their own fields first and the discriminator key last.** `click_event` and
+     `hover_event` objects end with `action`: `{"url":"…","action":"open_url"}`,
+     `{"id":"minecraft:stone","count":5,"action":"show_item"}`, `{"value":…,"action":"show_text"}`. (The content
+     kind's `type` key and the `source` / `object` sub-discriminators are never written, A.2.1.)
+   - The `atlas` object writes `atlas` before `sprite` (A.2.2).
+   NBT compounds carry no meaningful order (SNBT printing sorts keys, see `nbt/snbt.md`), but the network/binary NBT
+   form writes entries in insertion order, so the same order applies there.
 
 ### A.6.3 Where each encoding is used
 
@@ -201,6 +212,20 @@ The old `contents` key is not recognised.
 | Login disconnect reason | lenient JSON string, at most 262,144 characters | — |
 | Written book pages | NBT / network, plus a size rule | a page is rejected on decode if its compact JSON encoding exceeds **32,767 characters** (the check converts the page to JSON even when decoding NBT) |
 
+### A.6.4 Registry context
+
+Decoding takes a **registry context** that answers, per registry, whether it is available and whether an id is
+registered in it.
+1. **Static registries** (fixed by the game version: items, entity types, blocks, …) are always available.
+2. **Dynamic registries** (loaded from data packs: dialogs, enchantments, …) are available only when the caller
+   decodes with registry access. In the game that is every real path (network, commands, saved data, data packs);
+   a context without it exists only in tools.
+3. A reference by id to an entry that is not registered fails. A reference by id into a registry that is not
+   available fails ("registry does not exist"). An inline definition (where the field allows one, e.g. an inline
+   dialog) decodes in any context.
+4. The `text-component` parity suite decodes with full registry access: the game's built-in static registries plus
+   the built-in world registries of the version (the same entries the version's own data files describe).
+
 ## A.7 Translation lookup and argument formatting
 
 ### A.7.1 Lookup
@@ -211,6 +236,16 @@ The old `contents` key is not recognised.
    digits and dots, then `d` or `f` is rewritten to `%s` (or `%N$s`). So `%d`, `%.2f`, `%2$d` work in lang files.
    This rewrite does *not* apply to fallback strings or to a key used as its own template.
 3. The parsed template is cached per language instance and re-parsed after a language change.
+4. **The built-in default table** (dedicated server; also the client's base layer before resource packs) is built
+   from two files in the game jar, in this order:
+   1. `assets/minecraft/lang/en_us.json`: every entry, with rule 2's rewrite applied.
+   2. `assets/minecraft/lang/deprecated.json`, an object with `removed` (list of keys) and `renamed` (object mapping
+      old key → new key). First every `removed` key is deleted. Then each `renamed` pair is applied **in document
+      order**: the value under the old key is taken out; if there was one it is stored under the new key
+      (replacing any value there), otherwise the new key is deleted as well.
+   A missing `deprecated.json` means nothing is removed or renamed. In 26.3 this deletes 423 keys and renames 148,
+   changing 708 entries in all, so e.g. `{"translate":"addServer.add"}` flattens to the key text, not `Done`. *(Settled by the `text-component`
+   suite, 2026-11-25.)*
 
 ### A.7.2 Template parsing (ordered rules)
 
@@ -235,9 +270,18 @@ The old `contents` key is not recognised.
   values in the shortest round-trip form with at least one fractional digit, using `E` notation outside
   [10⁻³, 10⁷) (`1.5`, `1.0E10`, `1.0E-5`, `Infinity`).
 - **Numeric type depends on the source format.** From NBT the tag type is kept (`1b` → `1`; `1.5f` → `1.5`; SNBT `true`
-  is a byte → renders `1`). From JSON the library narrows each number: an integral value becomes the smallest of
-  byte/short/int/long that holds it (`2.0` → `2`); a non-integral value becomes a float if that is exact, else a double
-  (`1.5` → `1.5`, `0.1` → `0.1`); JSON `true` stays a boolean → `true` **[oracle]**.
+  is a byte → renders `1`). From JSON the library narrows each number using its **exact decimal value** (not a
+  double approximation):
+  1. If the decimal value is an integer that fits in a signed 64-bit long, it becomes the smallest of
+     byte/short/int/long that holds it. This includes `2.0` → `2`, `1e2` → `100`, `-0.0` → `0` (an integer zero, not a
+     negative zero) and `9007199254740993.0` → `9007199254740993` (exact, even though no double holds it).
+  2. Otherwise (a fractional value such as `1.0000000000000000001`, or an integer outside the long range such as
+     `1e20`) it becomes the nearest double; if that double converts to a float and back unchanged it is stored as a
+     float, else as a double. So `1.5` → float `1.5`, `0.1` → double `0.1`, `1.0000000000000000001` → float `1.0`
+     (renders `1.0`), `1e20` → double (renders `1.0E20`), `1e-400` → float `0.0`.
+  3. JSON `true` stays a boolean → `true`.
+  The narrowed type also decides the NBT tag type when the component is encoded to NBT (`-0.0` → byte `0`).
+  *(Rules 1–2 settled by the `text-component` suite, 2026-11-25.)*
 
 ## A.8 Flattening to plain text
 
@@ -416,6 +460,11 @@ render over dark purple + italic.
 
 Notation: *unit* = an empty map `{}` (any map decodes). *holder* = registry reference as in the registry spec: "id"
 means id only; "id/inline" also accepts an inline definition. *holder set* = `#tag`, single id, or list of ids.
+Every holder given by id, every id in a holder set, and every registry-keyed map key (e.g. the enchantment ids in
+`enchantments`) is checked against the registry context (A.6.4): an unregistered id, or an id into an unavailable
+registry, fails the component (so `{"minecraft:enchantments":{"minecraft:not_real":2}}` fails, which fails a
+`show_item` hover event and so the whole text component). Tags (`#…`) follow the registry spec (a missing tag fails).
+The `text-component` suite does not test tags yet: its built-in lookup has no data-pack tags loaded.
 *item template* = B.6. *dye* = one of the 16 dye names (see Constants). *Transient* rows have no saved form.
 
 | Id | Value shape (defaults in parentheses) | Validation |
@@ -534,7 +583,8 @@ means id only; "id/inline" also accepts an inline definition. *holder set* = `#t
 12. `"red"` and `"#FF5555"` styles compare equal but encode differently.
 13. `shadow_color: [2.0, 0, 0, 1]` gives red channel 254 (floor(510) masked), `[-0.5, …]` gives 128; result is
     re-encoded as an integer.
-14. NBT booleans: `bold:1b`, `bold:5`, `bold:0.5f` are true; `bold:"true"` fails; JSON `"bold": 256` **[oracle]**.
+14. NBT booleans: `bold:1b`, `bold:5`, `bold:0.5f` are true; `bold:"true"` fails. JSON `"bold": 1`, `0`, `256` and
+    `0.5` all **fail** the component (JSON booleans must be `true` / `false`).
 15. In NBT, `{text:5}` fails (numbers are not strings); same in JSON.
 16. Lenient fields: `{"translate":"k","fallback":5}` keeps the component and drops the fallback; `{"nbt":"a",
     "entity":"@s","interpret":"yes"}` behaves as `interpret:false`; but `{"selector":"@p","separator":5}` fails.

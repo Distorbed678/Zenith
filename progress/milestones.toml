@@ -152,6 +152,7 @@ tasks = [
   { t = "All vanilla data registries parse from the user's jar", done = false },
   { t = "Text components (JSON + NBT forms), styles, translation", done = true },
   { t = "Data components (item component system)", done = true },
+  { t = "Dialog codec (inline dialogs in click events)", done = false },
 ]
 
 # ───────────────────────────── P2 ─────────────────────────────

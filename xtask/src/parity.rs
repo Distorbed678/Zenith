@@ -1418,7 +1418,7 @@ pub fn math_helpers(version: &str, write: bool) -> anyhow::Result<bool> {
 
 /// A `java` command for running game code. The game's logger writes a `logs/` folder into the working directory,
 /// so it runs from a cache folder, never the repo.
-fn vanilla_command(java: &std::path::Path) -> anyhow::Result<std::process::Command> {
+pub(crate) fn vanilla_command(java: &std::path::Path) -> anyhow::Result<std::process::Command> {
     let cwd = zenith_install::cache_dir().join("parity/cwd");
     fs::create_dir_all(&cwd)?;
     let mut cmd = std::process::Command::new(java);
@@ -1429,7 +1429,7 @@ fn vanilla_command(java: &std::path::Path) -> anyhow::Result<std::process::Comma
 // ── datapack-load, stage 1: the JSON layer ───────────────────────────────────
 
 /// Canonical tree dump in UTF-16 units; must match `JsonCheck.canonical` (string lengths are UTF-16 lengths).
-fn json_canonical(j: &zenith_codec::json::Json, out: &mut Vec<u16>) {
+pub(crate) fn json_canonical(j: &zenith_codec::json::Json, out: &mut Vec<u16>) {
     use zenith_codec::json::Json;
     let push = |out: &mut Vec<u16>, s: &str| out.extend(s.encode_utf16());
     let push_string = |out: &mut Vec<u16>, s: &zenith_codec::json::JsonString| {

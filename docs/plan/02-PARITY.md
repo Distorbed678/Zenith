@@ -67,7 +67,7 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 | `registry-ids` | M4 | Every registry entry has the same numeric ID | All registries |
 | `blockstate-ids` | M4 | Every block state ↔ global ID | All states |
 | `datapack-load` | M5 | All vanilla data parses; decoded→re-encoded matches | Whole data/ tree from the jar |
-| `text-component` | M5 | JSON/NBT component codec + flattening | Generated corpus |
+| `text-component` | M5 | Decode status, JSON + network-NBT re-encode, NBT→JSON decode, plain + truncated flattening (`TextCheck`, full registry access) | Hand-made edge cases + every translation key (bare and with arguments) + every component-like value in the jar's data files |
 | `rng-streams` | M6 | RNG outputs identical for seeds × call patterns | Property-based |
 | `noise-samples` | M6 | Noise samplers identical at random points | 1M samples / noise |
 | `golden-terrain` | M7 | Blocks, biomes, heightmaps per chunk | 10k chunks × 50 seeds × 3 dimensions |

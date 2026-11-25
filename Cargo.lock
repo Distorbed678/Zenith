@@ -1572,6 +1572,7 @@ dependencies = [
  "toml",
  "ureq",
  "zenith-codec",
+ "zenith-components",
  "zenith-data",
  "zenith-install",
  "zenith-math",

@@ -3,6 +3,7 @@
 mod guard;
 mod oracle;
 mod parity;
+mod parity_text;
 mod progress;
 mod svg;
 
@@ -55,6 +56,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Text components: decode, JSON + NBT re-encode and plain-string flattening vs the game's own.
+    TextComponent {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Stage 1: Zenith's JSON layer vs the game's parsers (jar JSON + edge cases) and primitive codecs.
     DatapackLoad {
         #[arg(long, default_value = "26.3")]
@@ -160,6 +168,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::TextComponent { version, write },
+        } => parity_text::text_component(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::DatapackLoad { version, write },
         } => parity::datapack_load(&version, write),

@@ -652,7 +652,10 @@ passes a non-negative check as `0`.
   "number or [min, max] or {min_inclusive, max_inclusive}".
 - **Type-dispatched objects** (`"type": "<id>"` plus the type's own fields in the **same** object): a missing `type`
   is "no key type". An unknown type id is an error. The remaining keys are decoded by the chosen type's schema, and
-  extra keys are ignored.
+  extra keys are ignored. **On encode the chosen type's own fields are written first and the discriminator key
+  (`type`, or `action` for text events) last**, e.g. `{"title":"T","type":"minecraft:notice"}`. This holds for every
+  dispatched object built with the codec library's key-dispatch helper. *(Settled by the `text-component` suite,
+  2026-11-25.)*
 - **Identifiers, resource keys, holders and tags**: REG §1 and REG §2.6. A referenced id that is missing from a frozen
   registry is a decode error. A reference into a registry that is still loading creates a placeholder, and the failure
   shows up when that registry is frozen.
