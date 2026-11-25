@@ -1362,11 +1362,18 @@ pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(GOLDEN_SEEDS.len());
-    let mut seeds: Vec<i64> = GOLDEN_SEEDS.iter().copied().take(n_seeds).collect();
+    // Batching knob: ZENITH_GOLDEN_SEED_OFFSET skips that many seeds of the same fixed sequence, so a long soak can
+    // run as several shorter batches (e.g. offset 0, 10, 20, ... with ZENITH_GOLDEN_SEEDS=10).
+    let offset: usize = std::env::var("ZENITH_GOLDEN_SEED_OFFSET")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut all: Vec<i64> = GOLDEN_SEEDS.to_vec();
     let mut r = Lcg::new(0x601D_E7E5);
-    while seeds.len() < n_seeds {
-        seeds.push(((r.next() << 11) ^ r.next()) as i64);
+    while all.len() < offset + n_seeds {
+        all.push(((r.next() << 11) ^ r.next()) as i64);
     }
+    let seeds: Vec<i64> = all[offset..offset + n_seeds].to_vec();
     // One vanilla server per (seed, world type); `oracle::dump_chunks` is safe to call in parallel.
     let mut jobs: Vec<Job<'_>> = Vec::new();
     // Debug filter: ZENITH_GOLDEN_ONLY="<seed>:<preset>" runs a single world.
@@ -1381,7 +1388,10 @@ pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
             }
             let (ctx, timing) = (&ctx, &timing);
             jobs.push(Box::new(move || {
-                golden_terrain_job(ctx, version, seed, preset, timing)
+                // Report each world as it finishes, so an interrupted soak still shows what it covered.
+                let t = golden_terrain_job(ctx, version, seed, preset, timing)?;
+                println!("  world seed {seed} {preset}: {}/{}", t.passed, t.total);
+                Ok(t)
             }));
         }
     }
