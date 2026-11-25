@@ -22,7 +22,7 @@ Two ways were considered:
 ## Decision
 Option 2. The data generator is the game's own export feature and its outputs are data; shape logic is behaviour,
 which ADR 0001 says Zenith reimplements. Collision shapes are needed for entity movement anyway, so they must exist in
-Rust regardless. A `block-facts` parity suite dumps the game's facts for **every block state** (about 29,700 in 26.3)
+Rust regardless. A `block-facts` parity suite dumps the game's facts for **every block state** (35,723 in 26.3)
 and must be 100% before anything depends on them. Extraction stays a debugging aid in the oracle only, never a
 runtime input.
 
