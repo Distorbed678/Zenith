@@ -128,3 +128,9 @@ Answers are quoted or paraphrased faithfully. Where an answer changed an earlier
 - **Reader** (main thread): reads local reference code when needed, writes specs in `docs/specs/` in its own words.
 - **Implementer** (delegate or separate session): implements only from specs + public docs. It never reads `~/.cache/zenith/reference/`.
 | S.6 | (2026-11-25) "Antigravity usage is low so use Claude for subagents." Overrides S.3's Gemini preference until the owner says otherwise. Model per task: Opus 5.5 for readers/spec writing and intricate implementation, Sonnet 5.5 for well-specified implementation/tests/front-end. | CLAUDE.md rule 2 + memory |
+
+## Round 11 — 2026-11-25 — Security vs. 1:1
+
+| # | Question | Options offered | Answer |
+|---|----------|-----------------|--------|
+| 11.1 | Vanilla has non-gameplay security weaknesses (e.g. a data-pack overlay named `..` can read files outside the pack). Replicate or fix? | Fix + warn; replicate exactly; case by case | **Fix them and log a warning.** Normal packs behave exactly like vanilla; only malicious/broken input differs. Every such fix is listed in `docs/security-deviations.md`. |

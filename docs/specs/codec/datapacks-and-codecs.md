@@ -835,4 +835,5 @@ are not in the repo. Engineering decisions for the open questions:
   lookaround like Java) and covers the remaining syntax differences in tests.
 - **Case-insensitive file systems:** Zenith uses the OS's own file lookups, exactly as vanilla does, so behavior
   matches per platform.
-- **Overlay `..` escape:** policy question for the owner (see `docs/decisions/USER-ANSWERS.md`).
+- **Overlay `..` escape:** owner decision 11.1: **not replicated.** The overlay is refused with a warning (security
+  deviation #1 in `docs/security-deviations.md`). Everything else about overlays is replicated exactly.

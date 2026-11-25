@@ -25,6 +25,8 @@ The full plan lives in `docs/plan/` (start at `docs/plan/00-OVERVIEW.md`). Every
 4. **Fidelity.** Pixel-exact and gameplay-exact with vanilla. Internals may differ for speed, but must never change
    gameplay or visuals. **No built-in non-vanilla options: extras come from mods.** Bug parity covers every observable
    behavior, including gameplay bugs. Crashes, memory leaks and pure-performance bugs are not replicated.
+   **Security weaknesses** (non-gameplay, e.g. path escapes) are fixed with a logged warning, never replicated, and
+   each one is listed in `docs/security-deviations.md` (owner decision 11.1).
 5. **Speed.** As fast as possible, but only through changes that keep output 1:1 (proven by the parity suites).
 6. **UI design skill.** All launcher and website UI work follows Anthropic's **frontend-design** skill
    (`~/.claude/plugins/marketplaces/claude-plugins-official/plugins/frontend-design/skills/frontend-design/SKILL.md`).
