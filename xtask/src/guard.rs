@@ -19,6 +19,8 @@ use crate::repo_root;
 
 /// Blobs smaller than this are ignored by the hash rule (tiny/empty files collide by accident).
 const MIN_BLOB: u64 = 64;
+/// The only places our own Java tooling may live (parity oracle agent, JDK-only fixture generators).
+const JAVA_DIRS: [&str; 2] = ["tools/oracle/", "tools/javamap-fixtures/"];
 /// Any single tracked file above this size is rejected (keeps binaries out).
 const MAX_FILE: u64 = 5 * 1024 * 1024;
 
@@ -278,9 +280,10 @@ pub fn run(staged: bool, version: &str, fetch: bool, no_hashes: bool) -> anyhow:
         if ["class", "jar", "mca", "mcr", "jfr"].contains(&ext.as_str()) {
             violations.push(format!("{rel_s}: .{ext} files are never committed"));
         }
-        if ext == "java" && !rel_s.starts_with("tools/oracle/") {
+        if ext == "java" && !JAVA_DIRS.iter().any(|d| rel_s.starts_with(d)) {
             violations.push(format!(
-                "{rel_s}: .java is only allowed in tools/oracle/ (our own parity agent)"
+                "{rel_s}: .java is only allowed in {} (our own tooling)",
+                JAVA_DIRS.join(", ")
             ));
         }
         if meta.len() > MAX_FILE {
