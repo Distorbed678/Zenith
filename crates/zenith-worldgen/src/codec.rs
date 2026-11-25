@@ -376,7 +376,7 @@ pub(crate) fn decode_raw_cubic_spline(input: &Json) -> DataResult<RawCubicSpline
 // DensityFunction codec (all 44 types + literal + reference)
 // ---------------------------------------------------------------------------
 
-struct RawDensityFunctionCodec;
+pub(crate) struct RawDensityFunctionCodec;
 impl Codec<RawDensityFunction> for RawDensityFunctionCodec {
     fn decode(&self, input: &Json) -> DataResult<RawDensityFunction> {
         decode_raw_density_function(input)
@@ -784,7 +784,7 @@ impl Codec<NoiseSettings> for NoiseSettingsCodec {
     }
 }
 
-struct BlockStateSpecCodec;
+pub(crate) struct BlockStateSpecCodec;
 impl Codec<BlockStateSpec> for BlockStateSpecCodec {
     fn decode(&self, input: &Json) -> DataResult<BlockStateSpec> {
         match input {

@@ -183,10 +183,10 @@ tasks = [
   { t = "Multi-noise biome source + climate sampler", done = true },
   { t = "Noise chunk, terrain fill, heightmaps", done = true },
   { t = "Aquifers", done = true },
-  { t = "Ore veins (material rule), noodle caves", done = false },
-  { t = "Surface rules", done = false },
-  { t = "Carvers", done = false },
-  { t = "Golden diff: 10k chunks × 50 seeds, all dimensions", done = false },
+  { t = "Ore veins (material rule), noodle caves", done = true },
+  { t = "Surface rules", done = true },
+  { t = "Carvers", done = true },
+  { t = "Golden diff at scale (12 seeds × 1,966 chunks: 3 surface mismatches open); target 10k chunks × 50 seeds", done = false },
 ]
 
 [[milestone]]

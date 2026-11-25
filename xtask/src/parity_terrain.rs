@@ -23,7 +23,8 @@ use zenith_codec::resources::ZipPackResources;
 use zenith_parity::SuiteResult;
 use zenith_registry::{BlockStateTable, Identifier};
 use zenith_worldgen::{
-    BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState, RouterField, WorldgenData,
+    BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState, RouterField,
+    TerrainGenerator, WorldgenData,
 };
 
 use crate::parity::vanilla_command;
@@ -583,12 +584,13 @@ const PRESET_SOURCES: &[(&str, &str, &str)] = &[
     ("end", "normal", "minecraft:the_end"),
 ];
 
-/// The biome source JSON and noise settings id of a built-in dimension, read from the user's jar.
-fn preset_source(
+/// The biome source JSON, noise settings id, and dimension type id of a built-in dimension,
+/// read from the user's jar.
+fn preset_dimension(
     jar: &std::path::Path,
     preset: &str,
     dimension: &str,
-) -> anyhow::Result<(Json, String)> {
+) -> anyhow::Result<(Json, String, String)> {
     let mut zip = zip::ZipArchive::new(fs::File::open(jar)?)?;
     let mut b = Vec::new();
     zip.by_name(&format!(
@@ -604,15 +606,27 @@ fn preset_source(
         let Json::Object(dim) = dims.get(dimension)? else {
             return None;
         };
+        let dim_type = dim.get("type")?.as_str()?.to_owned();
         let Json::Object(g) = dim.get("generator")? else {
             return None;
         };
         Some((
             g.get("biome_source")?.clone(),
             g.get("settings")?.as_str()?.to_owned(),
+            dim_type,
         ))
     })();
     generator.with_context(|| format!("world preset {preset}: no generator for {dimension}"))
+}
+
+/// The biome source JSON and noise settings id of a built-in dimension, read from the user's jar.
+fn preset_source(
+    jar: &std::path::Path,
+    preset: &str,
+    dimension: &str,
+) -> anyhow::Result<(Json, String)> {
+    let (bs, settings, _) = preset_dimension(jar, preset, dimension)?;
+    Ok((bs, settings))
 }
 
 fn biome_job(
@@ -746,6 +760,7 @@ struct ColumnContext {
     data: WorldgenData,
     blocks: BlockStateTable,
     tags: BlockTags,
+    jar: std::path::PathBuf,
 }
 
 fn load_column_context(version: &str) -> anyhow::Result<ColumnContext> {
@@ -761,7 +776,12 @@ fn load_column_context(version: &str) -> anyhow::Result<ColumnContext> {
     let data = WorldgenData::load(&pack).map_err(|e| anyhow::anyhow!("load worldgen data: {e}"))?;
     let tags =
         BlockTags::load(&pack, &blocks).map_err(|e| anyhow::anyhow!("load block tags: {e}"))?;
-    Ok(ColumnContext { data, blocks, tags })
+    Ok(ColumnContext {
+        data,
+        blocks,
+        tags,
+        jar: install.client_jar,
+    })
 }
 
 fn column_points(min_y: i32, height: i32, n_random: usize, salt: u64) -> Vec<(i32, i32)> {
@@ -888,6 +908,481 @@ pub fn worldgen_columns(version: &str, write: bool) -> anyhow::Result<bool> {
         "worldgen-columns",
         version,
         "4 base heights + full base column block-state IDs; 7 noise settings × 3 seeds × ~60 columns",
+        &t,
+        write,
+    )
+}
+
+// ── golden-terrain ───────────────────────────────────────────────────────────
+
+const GOLDEN_SEEDS: &[i64] = &[12345, -1, 1_234_567_890_123_456_789];
+
+fn golden_chunks_for(preset: &str) -> Vec<(&'static str, Vec<(i32, i32)>)> {
+    match preset {
+        "normal" => vec![
+            (
+                "minecraft:overworld",
+                vec![
+                    (200, 200),
+                    (201, 200),
+                    (200, 201),
+                    (201, 201),
+                    (-300, 450),
+                    (512, -256),
+                    (10_000, -10_000),
+                    (-10_003, 9_997),
+                ],
+            ),
+            (
+                "minecraft:the_nether",
+                vec![
+                    (80, 80),
+                    (81, 80),
+                    (80, 81),
+                    (81, 81),
+                    (-120, 150),
+                    (250, -180),
+                    (10_000, 10_000),
+                    (-9_995, -10_002),
+                ],
+            ),
+            (
+                "minecraft:the_end",
+                vec![
+                    (100, 100),
+                    (101, 100),
+                    (100, 101),
+                    (101, 101),
+                    (30, -30),
+                    (-80, 70),
+                    (10_000, -9_999),
+                    (-10_001, 10_002),
+                ],
+            ),
+        ],
+        "large_biomes" => vec![(
+            "minecraft:overworld",
+            vec![
+                (220, -220),
+                (221, -220),
+                (220, -219),
+                (221, -219),
+                (-400, -350),
+                (600, 300),
+                (10_005, 9_995),
+                (-10_008, -9_992),
+            ],
+        )],
+        "amplified" => vec![(
+            "minecraft:overworld",
+            vec![
+                (-210, 210),
+                (-209, 210),
+                (-210, 211),
+                (-209, 211),
+                (350, -400),
+                (-500, -500),
+                (9_998, -10_004),
+                (-10_002, 10_006),
+            ],
+        )],
+        _ => Vec::new(),
+    }
+}
+
+fn heightmap_kind_from_name(name: &str) -> Option<HeightmapKind> {
+    match name {
+        "OCEAN_FLOOR_WG" => Some(HeightmapKind::OceanFloorWg),
+        "WORLD_SURFACE_WG" => Some(HeightmapKind::WorldSurfaceWg),
+        "OCEAN_FLOOR" => Some(HeightmapKind::OceanFloor),
+        "WORLD_SURFACE" => Some(HeightmapKind::WorldSurface),
+        "MOTION_BLOCKING" => Some(HeightmapKind::MotionBlocking),
+        "MOTION_BLOCKING_NO_LEAVES" => Some(HeightmapKind::MotionBlockingNoLeaves),
+        _ => None,
+    }
+}
+
+/// Finds deterministic chunks (>= 25 chunks from origin) hitting special surface passes
+/// (`eroded_badlands` pillars/bands, `frozen_ocean`/`deep_frozen_ocean` icebergs,
+/// `sulfur_caves` 3D noise threshold, and `jagged_peaks`/`snowy_slopes`/`frozen_peaks` steep+temp).
+fn find_special_overworld_chunks(generator: &TerrainGenerator) -> Vec<(i32, i32)> {
+    let rs = generator.noise_generator().random_state();
+    let bs = generator.biome_source();
+    let sampler = PointClimate::new(|bx, by, bz| rs.climate_point(bx, by, bz));
+    let mut state = SearchState::new();
+
+    let mut found: [Option<(i32, i32)>; 4] = [None; 4];
+    for step in 0..4000i32 {
+        let cx = 25 + (step % 80) * 16;
+        let cz = 25 + (step / 80) * 16;
+        let qx = (cx << 2) + 2;
+        let qz = (cz << 2) + 2;
+        if found[0].is_none() || found[1].is_none() || found[3].is_none() {
+            let b = bs.noise_biome(qx, 24, qz, &sampler, &mut state);
+            match b.path() {
+                "eroded_badlands" if found[0].is_none() => found[0] = Some((cx, cz)),
+                "frozen_ocean" | "deep_frozen_ocean" if found[1].is_none() => {
+                    found[1] = Some((cx, cz));
+                }
+                "jagged_peaks" | "frozen_peaks" | "snowy_slopes" if found[3].is_none() => {
+                    found[3] = Some((cx, cz));
+                }
+                _ => {}
+            }
+        }
+        if found[2].is_none() {
+            let b = bs.noise_biome(qx, 0, qz, &sampler, &mut state);
+            if b.path() == "sulfur_caves" {
+                found[2] = Some((cx, cz));
+            }
+        }
+        if found.iter().all(Option::is_some) {
+            break;
+        }
+    }
+    found.into_iter().flatten().collect()
+}
+
+struct GoldenTiming {
+    vanilla_ms: u128,
+    zenith_ms: u128,
+    chunks: usize,
+    overworld_zenith_ms: u128,
+    overworld_chunks: usize,
+}
+
+fn golden_terrain_job(
+    ctx: &ColumnContext,
+    version: &str,
+    seed: i64,
+    preset: &str,
+    timing: &std::sync::Mutex<GoldenTiming>,
+) -> anyhow::Result<Tally> {
+    use crate::oracle::{ChunkRequest, ChunkWorld, dump_chunks, parse_chunk_dump};
+
+    let mut t = Tally::default();
+    let mut dims = golden_chunks_for(preset);
+
+    // Build one TerrainGenerator per dimension in this world first so we can also pick
+    // special-surface-pass Overworld chunks (eroded badlands, frozen ocean, sulfur caves, peaks).
+    let mut generators: std::collections::HashMap<&str, TerrainGenerator> =
+        std::collections::HashMap::new();
+    for &(dim, _) in &dims {
+        let (source_json, settings_str, dim_type_str) = preset_dimension(&ctx.jar, preset, dim)?;
+        let biome_source = match BiomeSource::decode_json(&source_json) {
+            zenith_codec::codec::DataResult::Success(s) => s,
+            other => anyhow::bail!("{preset}/{dim}: failed to decode biome_source: {other:?}"),
+        };
+        let settings_id = Identifier::parse(&settings_str).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let dim_type_id = Identifier::parse(&dim_type_str).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let mut generator = TerrainGenerator::new(
+            &ctx.data,
+            biome_source,
+            &settings_id,
+            seed,
+            &ctx.blocks,
+            &ctx.tags,
+        )
+        .map_err(|e| anyhow::anyhow!("{preset}/{dim} seed {seed}: {e}"))?;
+        if let Some(dh) = ctx.data.dimension_height(&dim_type_id) {
+            generator = generator.with_chunk_height(dh.min_y, dh.height);
+        }
+        generators.insert(dim, generator);
+    }
+
+    if preset == "normal"
+        && let Some(ow_gen) = generators.get("minecraft:overworld")
+    {
+        let extra = find_special_overworld_chunks(ow_gen);
+        if let Some((_, coords)) = dims.iter_mut().find(|(d, _)| *d == "minecraft:overworld") {
+            for c in extra {
+                if !coords.contains(&c) {
+                    coords.push(c);
+                }
+            }
+        }
+    }
+
+    // Scale knob: ZENITH_GOLDEN_RANDOM extra random chunks per dimension (far from the origin, up to ±20,000).
+    let extra: usize = std::env::var("ZENITH_GOLDEN_RANDOM")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    for (dim, coords) in dims.iter_mut() {
+        let mut r =
+            Lcg::new((seed as u64) ^ (preset.len() as u64) << 40 ^ (dim.len() as u64) << 48);
+        let target = coords.len() + extra;
+        while coords.len() < target {
+            let c = (
+                r.range(-20_000, 20_000) as i32,
+                r.range(-20_000, 20_000) as i32,
+            );
+            if (c.0.abs() > 32 || c.1.abs() > 32) && !coords.contains(&c) {
+                coords.push(c);
+            }
+        }
+    }
+
+    let mut requests = Vec::new();
+    for (dim, coords) in &dims {
+        for &(cx, cz) in coords {
+            requests.push(ChunkRequest {
+                dimension: (*dim).to_owned(),
+                x: cx,
+                z: cz,
+                status: "terrain".to_owned(),
+            });
+        }
+    }
+
+    let world = ChunkWorld {
+        seed,
+        level_type: format!("minecraft:{preset}"),
+        structures: false,
+    };
+    let van_start = std::time::Instant::now();
+    let raw = dump_chunks(version, &world, &requests)?;
+    let van_ms = van_start.elapsed().as_millis();
+    let dumped = parse_chunk_dump(&raw)?;
+    anyhow::ensure!(
+        dumped.len() == requests.len(),
+        "dumped chunk count {} != requested {}",
+        dumped.len(),
+        requests.len()
+    );
+
+    let zen_start = std::time::Instant::now();
+    let mut ow_ms = 0u128;
+    let mut ow_count = 0usize;
+    let mut zen_chunks = Vec::with_capacity(dumped.len());
+    for dc in &dumped {
+        let generator = generators
+            .get(dc.dimension.as_str())
+            .with_context(|| format!("missing generator for {}", dc.dimension))?;
+        let t0 = std::time::Instant::now();
+        let chunk = generator.generate_chunk(dc.x, dc.z);
+        if dc.dimension == "minecraft:overworld" {
+            ow_ms += t0.elapsed().as_micros();
+            ow_count += 1;
+        }
+        zen_chunks.push(chunk);
+    }
+    let zen_ms = zen_start.elapsed().as_millis();
+    {
+        let mut guard = timing.lock().expect("timing");
+        guard.vanilla_ms += van_ms;
+        guard.zenith_ms += zen_ms;
+        guard.chunks += dumped.len();
+        guard.overworld_zenith_ms += ow_ms;
+        guard.overworld_chunks += ow_count;
+    }
+
+    for (dc, zc) in dumped.iter().zip(&zen_chunks) {
+        let tag = format!("{preset}/{} seed {seed} ({},{})", dc.dimension, dc.x, dc.z);
+
+        // 1. Blocks
+        let blocks_ok = dc.min_y == zc.min_y()
+            && dc.height == zc.height()
+            && dc.blocks.as_slice() == zc.blocks();
+        t.check(blocks_ok, || {
+            if dc.min_y != zc.min_y() || dc.height != zc.height() {
+                return format!(
+                    "{tag} blocks: vertical range vanilla ({}, {}) | zenith ({}, {})",
+                    dc.min_y,
+                    dc.height,
+                    zc.min_y(),
+                    zc.height()
+                );
+            }
+            match dc
+                .blocks
+                .iter()
+                .zip(zc.blocks())
+                .position(|(a, b)| a != b)
+            {
+                Some(idx) => {
+                    let sec = idx / 4096;
+                    let rem = idx % 4096;
+                    let ly = rem / 256;
+                    let lz = (rem % 256) / 16;
+                    let lx = rem % 16;
+                    let wx = (dc.x << 4) + lx as i32;
+                    let wy = dc.min_y + (sec * 16 + ly) as i32;
+                    let wz = (dc.z << 4) + lz as i32;
+                    let biome = zc
+                        .biome_at_quart(lx >> 2, (sec * 16 + ly) >> 2, lz >> 2)
+                        .map_or_else(|| "?".to_owned(), ToString::to_string);
+                    format!(
+                        "{tag} blocks: first diff at ({wx},{wy},{wz}) [biome {biome}]: vanilla {} | zenith {}",
+                        describe_state(&ctx.blocks, dc.blocks[idx]),
+                        describe_state(&ctx.blocks, zc.blocks()[idx]),
+                    )
+                }
+                None => format!(
+                    "{tag} blocks: length vanilla {} | zenith {}",
+                    dc.blocks.len(),
+                    zc.blocks().len()
+                ),
+            }
+        });
+
+        // 2. Biomes
+        let zen_biomes: Vec<String> = zc.biomes_iter().map(ToString::to_string).collect();
+        t.check(dc.biomes == zen_biomes, || {
+            match dc
+                .biomes
+                .iter()
+                .zip(&zen_biomes)
+                .position(|(a, b)| a != b)
+            {
+                Some(idx) => {
+                    let sec = idx / 64;
+                    let rem = idx % 64;
+                    let qy = rem / 16;
+                    let qz = (rem % 16) / 4;
+                    let qx = rem % 4;
+                    format!(
+                        "{tag} biomes: first diff at sec={sec} q=({qx},{qy},{qz}): vanilla {} | zenith {}",
+                        dc.biomes[idx], zen_biomes[idx]
+                    )
+                }
+                None => format!(
+                    "{tag} biomes: length vanilla {} | zenith {}",
+                    dc.biomes.len(),
+                    zen_biomes.len()
+                ),
+            }
+        });
+
+        // 3. Each heightmap (6 total at terrain status)
+        for (hm_name, van_heights) in &dc.heightmaps {
+            let kind = heightmap_kind_from_name(hm_name);
+            let zen_hm = kind.and_then(|k| zc.heightmap(k));
+            let ok = zen_hm.is_some_and(|h| h.heights().as_slice() == van_heights.as_slice());
+            t.check(ok, || match zen_hm {
+                Some(h) => {
+                    match van_heights
+                        .iter()
+                        .zip(h.heights())
+                        .position(|(a, b)| a != b)
+                    {
+                        Some(idx) => format!(
+                            "{tag} heightmap {hm_name}: first diff at local ({},{}): vanilla {} | zenith {}",
+                            idx % 16,
+                            idx / 16,
+                            van_heights[idx],
+                            h.heights()[idx]
+                        ),
+                        None => format!("{tag} heightmap {hm_name}: length mismatch"),
+                    }
+                }
+                None => format!("{tag} heightmap {hm_name}: missing on Zenith chunk"),
+            });
+        }
+
+        // 4. Post-processing marks
+        let zen_marks: Vec<(i32, u16)> = zc
+            .post_processing_marks()
+            .into_iter()
+            .map(|m| (m.section, m.packed))
+            .collect();
+        t.check(dc.post_processing == zen_marks, || {
+            match dc
+                .post_processing
+                .iter()
+                .zip(&zen_marks)
+                .position(|(a, b)| a != b)
+            {
+                Some(idx) => format!(
+                    "{tag} post_processing: first diff at #{idx} (len van {} / zen {}): vanilla {:?} | zenith {:?}",
+                    dc.post_processing.len(),
+                    zen_marks.len(),
+                    dc.post_processing[idx],
+                    zen_marks[idx]
+                ),
+                None => format!(
+                    "{tag} post_processing: len vanilla {} | zenith {}",
+                    dc.post_processing.len(),
+                    zen_marks.len()
+                ),
+            }
+        });
+
+        // 5. Scheduled tick counts
+        let ticks_ok =
+            dc.block_ticks == zc.block_tick_count() && dc.fluid_ticks == zc.fluid_tick_count();
+        t.check(ticks_ok, || {
+            format!(
+                "{tag} ticks: vanilla ({}, {}) | zenith ({}, {})",
+                dc.block_ticks,
+                dc.fluid_ticks,
+                zc.block_tick_count(),
+                zc.fluid_tick_count()
+            )
+        });
+    }
+
+    Ok(t)
+}
+
+/// `golden-terrain`: full `terrain`-status chunks (blocks, stored biomes, all 6 heightmaps,
+/// post-processing marks, tick counts) across 3 seeds × {normal (OW+Nether+End), large_biomes, amplified}.
+pub fn golden_terrain(version: &str, write: bool) -> anyhow::Result<bool> {
+    let ctx = load_column_context(version)?;
+    let timing = std::sync::Mutex::new(GoldenTiming {
+        vanilla_ms: 0,
+        zenith_ms: 0,
+        chunks: 0,
+        overworld_zenith_ms: 0,
+        overworld_chunks: 0,
+    });
+    // Scale knob: ZENITH_GOLDEN_SEEDS total seeds (the fixed ones first, then derived seeds).
+    let n_seeds: usize = std::env::var("ZENITH_GOLDEN_SEEDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(GOLDEN_SEEDS.len());
+    let mut seeds: Vec<i64> = GOLDEN_SEEDS.iter().copied().take(n_seeds).collect();
+    let mut r = Lcg::new(0x601D_E7E5);
+    while seeds.len() < n_seeds {
+        seeds.push(((r.next() << 11) ^ r.next()) as i64);
+    }
+    // One vanilla server per (seed, world type); `oracle::dump_chunks` is safe to call in parallel.
+    let mut jobs: Vec<Job<'_>> = Vec::new();
+    for &seed in &seeds {
+        for preset in ["normal", "large_biomes", "amplified"] {
+            let (ctx, timing) = (&ctx, &timing);
+            jobs.push(Box::new(move || {
+                golden_terrain_job(ctx, version, seed, preset, timing)
+            }));
+        }
+    }
+    let t = run_jobs(jobs)?;
+    let tm = timing.into_inner().expect("timing");
+    let zen_per_chunk = if tm.chunks > 0 {
+        tm.zenith_ms as f64 / tm.chunks as f64
+    } else {
+        0.0
+    };
+    let ow_per_chunk = if tm.overworld_chunks > 0 {
+        (tm.overworld_zenith_ms as f64 / 1000.0) / tm.overworld_chunks as f64
+    } else {
+        0.0
+    };
+    println!(
+        "golden-terrain timing: {} chunks — zenith {} ms ({:.2} ms/chunk overall; {:.2} ms/chunk overworld) | vanilla server runs {} ms total",
+        tm.chunks, tm.zenith_ms, zen_per_chunk, ow_per_chunk, tm.vanilla_ms
+    );
+    report(
+        "golden-terrain",
+        version,
+        &format!(
+            "blocks, stored biomes, 6 heightmaps, post-processing marks, ticks; {} seeds × (normal OW+Nether+End, large_biomes, amplified) × {} chunks",
+            seeds.len(),
+            8 + std::env::var("ZENITH_GOLDEN_RANDOM")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0)
+        ),
         &t,
         write,
     )

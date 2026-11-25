@@ -3,12 +3,14 @@
 //!
 //! Skips cleanly (prints a note and passes) when no 26.3 install is present on the host.
 
+use zenith_biome::{BiomeSource, MultiNoiseBiomeSource, MultiNoisePreset, TheEndBiomeSource};
 use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
 use zenith_registry::{BlockStateTable, Identifier};
 use zenith_worldgen::interval::contains;
 use zenith_worldgen::{
-    AquiferConfig, BlockTags, HeightmapKind, NoiseGenerator, RandomState, RouterField, WorldgenData,
+    AquiferConfig, BlockTags, HeightmapKind, NoiseGenerator, RandomState, RouterField,
+    TerrainGenerator, WorldgenData,
 };
 
 #[test]
@@ -199,6 +201,77 @@ fn fill_vanilla_chunks_and_verify_heightmaps() {
                 generator.predicates().has_fluid(state),
                 "{settings_name}: post-processing mark at ({lx},{block_y},{lz}) is not a fluid"
             );
+        }
+    }
+}
+
+#[test]
+fn generate_vanilla_terrain_chunks_all_dimensions() {
+    let installs = zenith_install::discover_installs(Some("26.3"));
+    let Some(install) = installs.first() else {
+        eprintln!("NOTE: no local 26.3 install found; skipping vanilla terrain step test");
+        return;
+    };
+    let tables_path = zenith_data::version_dir("26.3").join("tables.bin");
+    let Ok(tables) = zenith_data::Tables::load(&tables_path) else {
+        eprintln!("NOTE: no cached tables.bin found; skipping vanilla terrain step test");
+        return;
+    };
+
+    let blocks = BlockStateTable::from_tables(&tables).expect("block state table");
+    let pack = ZipPackResources::open("vanilla", &install.client_jar, null_log());
+    let data = WorldgenData::load(&pack).expect("worldgen data");
+    let tags = BlockTags::load(&pack, &blocks).expect("block tags");
+
+    let cases = [
+        (
+            "minecraft:overworld",
+            "minecraft:overworld",
+            BiomeSource::MultiNoise(MultiNoiseBiomeSource::from_preset(
+                MultiNoisePreset::Overworld,
+            )),
+            -64,
+            384,
+        ),
+        (
+            "minecraft:nether",
+            "minecraft:the_nether",
+            BiomeSource::MultiNoise(MultiNoiseBiomeSource::from_preset(MultiNoisePreset::Nether)),
+            0,
+            256,
+        ),
+        (
+            "minecraft:end",
+            "minecraft:the_end",
+            BiomeSource::TheEnd(TheEndBiomeSource::new()),
+            0,
+            256,
+        ),
+    ];
+
+    for (settings_str, dim_type_str, bs, exp_min_y, exp_height) in cases {
+        let sid = Identifier::parse(settings_str).unwrap();
+        let did = Identifier::parse(dim_type_str).unwrap();
+        let dh = data.dimension_height(&did).expect("dimension height");
+        assert_eq!((dh.min_y, dh.height), (exp_min_y, exp_height));
+
+        let generator = TerrainGenerator::new(&data, bs, &sid, 12345, &blocks, &tags)
+            .expect("TerrainGenerator::new")
+            .with_chunk_height(dh.min_y, dh.height);
+        let chunk = generator.generate_chunk(200, 200);
+        assert_eq!(chunk.min_y(), exp_min_y);
+        assert_eq!(chunk.height(), exp_height);
+        assert_eq!(chunk.biome_indices().len(), chunk.section_count() * 64);
+        assert!(!chunk.biome_palette().is_empty());
+        for kind in [
+            HeightmapKind::OceanFloorWg,
+            HeightmapKind::WorldSurfaceWg,
+            HeightmapKind::OceanFloor,
+            HeightmapKind::WorldSurface,
+            HeightmapKind::MotionBlocking,
+            HeightmapKind::MotionBlockingNoLeaves,
+        ] {
+            assert!(chunk.heightmap(kind).is_some(), "missing {kind:?}");
         }
     }
 }

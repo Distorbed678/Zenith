@@ -1742,6 +1742,7 @@ name = "zenith-worldgen"
 version = "0.0.1"
 dependencies = [
  "thiserror",
+ "zenith-biome",
  "zenith-codec",
  "zenith-data",
  "zenith-install",

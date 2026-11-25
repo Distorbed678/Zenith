@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T15:18:53Z",
+  "generatedAt": "2026-11-25T16:08:43Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 15.7,
-    "parityPercent": 37.1,
+    "percent": 17.4,
+    "parityPercent": 40.0,
     "milestonesDone": 3,
     "milestonesTotal": 33,
-    "suitesPassing": 12,
+    "suitesPassing": 13,
     "suitesTotal": 35
   },
   "phases": [
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 12.5,
+      "percent": 17.0,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -469,8 +469,8 @@
       "title": "Terrain generation",
       "status": "in-progress",
       "weight": 8.0,
-      "percent": 62.5,
-      "tasksDone": 4,
+      "percent": 93.8,
+      "tasksDone": 7,
       "tasksTotal": 8,
       "tasks": [
         {
@@ -491,18 +491,18 @@
         },
         {
           "title": "Ore veins (material rule), noodle caves",
-          "done": false
+          "done": true
         },
         {
           "title": "Surface rules",
-          "done": false
+          "done": true
         },
         {
           "title": "Carvers",
-          "done": false
+          "done": true
         },
         {
-          "title": "Golden diff: 10k chunks × 50 seeds, all dimensions",
+          "title": "Golden diff at scale (12 seeds × 1,966 chunks: 3 surface mismatches open); target 10k chunks × 50 seeds",
           "done": false
         }
       ],
@@ -530,10 +530,10 @@
         },
         {
           "id": "golden-terrain",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 1320,
+          "total": 1320,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         }
       ]
     },
@@ -1396,8 +1396,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 15.7,
-      "parityPercent": 37.1
+      "percent": 17.4,
+      "parityPercent": 40.0
     }
   ]
 }

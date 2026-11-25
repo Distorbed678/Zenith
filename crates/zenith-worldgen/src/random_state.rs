@@ -54,6 +54,15 @@ impl SeededRandom {
             Self::Xoroshiro(r) => r.next_double(),
         }
     }
+
+    /// Returns the next boolean.
+    #[inline]
+    pub fn next_boolean(&mut self) -> bool {
+        match self {
+            Self::Legacy(r) => r.next_boolean(),
+            Self::Xoroshiro(r) => r.next_boolean(),
+        }
+    }
 }
 
 /// Algorithm-erased positional random factory (`LEGACY` 48-bit LCG or `XOROSHIRO` xoroshiro128++).
@@ -71,6 +80,14 @@ impl PositionalFactory {
         match self {
             Self::Legacy(f) => Self::Legacy(f.from_hash_of(name).fork_positional()),
             Self::Xoroshiro(f) => Self::Xoroshiro(f.from_hash_of(name).fork_positional()),
+        }
+    }
+
+    /// Creates a random source from the hash of `name` (`rootRandom.fromHashOf(name)`).
+    pub fn from_hash_of(&self, name: &str) -> SeededRandom {
+        match self {
+            Self::Legacy(f) => SeededRandom::Legacy(f.from_hash_of(name)),
+            Self::Xoroshiro(f) => SeededRandom::Xoroshiro(f.from_hash_of(name)),
         }
     }
 
@@ -198,6 +215,18 @@ impl RandomState {
         settings: NoiseGeneratorSettings,
         seed: i64,
     ) -> Result<Self, CompileError> {
+        let (rs, _) = Self::from_settings_with_extra(settings, seed, &[])?;
+        Ok(rs)
+    }
+
+    /// Seeds a [`RandomState`] and compiles `extra_functions` (such as `minecraft:ore_vein`
+    /// density/richness/filler_gap functions) through the same [`DensityFunctionCompiler`] so
+    /// deduplicated `cache(...)` cells and noise instances are shared seamlessly.
+    pub(crate) fn from_settings_with_extra(
+        settings: NoiseGeneratorSettings,
+        seed: i64,
+        extra_functions: &[&DensityFunction],
+    ) -> Result<(Self, Vec<CompiledSampler>), CompileError> {
         let mut backend = SeedingBackend::new(seed, settings.legacy_random_source());
         let mut compiler = DensityFunctionCompiler::new();
 
@@ -225,7 +254,12 @@ impl RandomState {
             None => None,
         };
 
-        Ok(Self {
+        let mut extra_samplers = Vec::with_capacity(extra_functions.len());
+        for f in extra_functions {
+            extra_samplers.push(compiler.get_sampler(f, &mut backend)?);
+        }
+
+        let rs = Self {
             seed,
             settings,
             root_random: backend.root_random,
@@ -233,6 +267,59 @@ impl RandomState {
             router_samplers,
             aquifer_samplers,
             cache_count: compiler.cache_count(),
+        };
+        Ok((rs, extra_samplers))
+    }
+
+    /// Instantiates or returns a cached `NormalNoise` for `id`, seeded via
+    /// `rootRandom.fromHashOf(id.toString())` (matching `RandomState.getOrCreateNoise`).
+    pub fn instantiate_noise(
+        &self,
+        id: &Identifier,
+        params: &zenith_math::NormalNoiseParameters,
+    ) -> Result<Arc<NormalNoise>, CompileError> {
+        if let Some(existing) = self.noise_instances.get(id) {
+            return Ok(Arc::clone(existing));
+        }
+        let key_str = id.to_string();
+        if key_str == NETHER_TEMPERATURE_ID {
+            let n = NormalNoise::from_nether_world_seed(self.seed, 0, params.clone())?;
+            return Ok(Arc::new(n));
+        }
+        if key_str == NETHER_VEGETATION_ID {
+            let n = NormalNoise::from_nether_world_seed(self.seed, 1, params.clone())?;
+            return Ok(Arc::new(n));
+        }
+        let noise = match &self.root_random {
+            PositionalFactory::Legacy(f) => {
+                let mut rng = f.from_hash_of(&key_str);
+                NormalNoise::new(&mut rng, params.clone())
+            }
+            PositionalFactory::Xoroshiro(f) => {
+                let mut rng = f.from_hash_of(&key_str);
+                NormalNoise::new(&mut rng, params.clone())
+            }
+        };
+        Ok(Arc::new(noise))
+    }
+
+    /// Samples all six climate channels (`Temperature`, `Vegetation`, `Continents`, `Erosion`,
+    /// `Depth`, `Ridges`) over `volume` using one shared caching [`SamplerContext`].
+    pub fn sample_climate_volume(&self, volume: DensityVolume) -> [Vec<f32>; 6] {
+        let mut ctx = self.new_sampler_context(true);
+        let len = volume.len();
+        let fields = [
+            RouterField::Temperature,
+            RouterField::Vegetation,
+            RouterField::Continents,
+            RouterField::Erosion,
+            RouterField::Depth,
+            RouterField::Ridges,
+        ];
+        std::array::from_fn(|i| {
+            let mut buf = vec![0.0_f32; len];
+            self.router_samplers[fields[i].index()].sample_volume(&mut ctx, &mut buf, volume);
+            buf
         })
     }
 

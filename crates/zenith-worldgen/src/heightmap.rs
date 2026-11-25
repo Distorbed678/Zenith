@@ -21,6 +21,9 @@ pub const TAG_BLOCKS_MOTION_IN_HEIGHTMAP: &str = "minecraft:blocks_motion_in_hei
 pub const TAG_BLOCKS_MOTION_IN_HEIGHTMAP_NO_LEAVES: &str =
     "minecraft:blocks_motion_in_heightmap_no_leaves";
 
+/// Tag ID listing blocks that carvers must never replace (`#minecraft:uncarvable`).
+pub const TAG_UNCARVABLE: &str = "minecraft:uncarvable";
+
 /// Resolved block tags (`data/<ns>/tags/block/*.json`) keyed by tag identifier.
 ///
 /// Each tag stores deduplicated block protocol IDs from [`BlockStateTable`].
@@ -175,13 +178,17 @@ const FLAG_IS_WATER: u8 = 1 << 2;
 const FLAG_IS_LAVA: u8 = 1 << 3;
 const FLAG_BLOCKS_MOTION: u8 = 1 << 4;
 const FLAG_BLOCKS_MOTION_NO_LEAVES: u8 = 1 << 5;
+const FLAG_UNCARVABLE: u8 = 1 << 6;
+const FLAG_GRASS_OR_MYCELIUM: u8 = 1 << 7;
 
-/// Precomputed O(1) block-state predicates for terrain fill, aquifers, and heightmaps.
+/// Precomputed O(1) block-state predicates for terrain fill, aquifers, surface rules, carvers,
+/// and heightmaps.
 #[derive(Debug, Clone)]
 pub struct BlockPredicates {
     air_id: u32,
     water_id: u32,
     lava_id: u32,
+    dirt_id: Option<u32>,
     state_flags: Vec<u8>,
 }
 
@@ -196,6 +203,9 @@ impl BlockPredicates {
         let void_air_block = Identifier::with_default_namespace("void_air").expect("valid id");
         let water_block = Identifier::with_default_namespace("water").expect("valid id");
         let lava_block = Identifier::with_default_namespace("lava").expect("valid id");
+        let dirt_block = Identifier::with_default_namespace("dirt").expect("valid id");
+        let grass_block = Identifier::with_default_namespace("grass_block").expect("valid id");
+        let mycelium_block = Identifier::with_default_namespace("mycelium").expect("valid id");
         let bubble_column_block =
             Identifier::with_default_namespace("bubble_column").expect("valid id");
         let kelp_block = Identifier::with_default_namespace("kelp").expect("valid id");
@@ -216,10 +226,12 @@ impl BlockPredicates {
             .block(&lava_block)
             .ok_or_else(|| lava_block.clone())?
             .default_state;
+        let dirt_id = blocks.block(&dirt_block).map(|b| b.default_state);
 
         let motion_tag = Identifier::parse(TAG_BLOCKS_MOTION_IN_HEIGHTMAP).expect("valid tag id");
         let motion_no_leaves_tag =
             Identifier::parse(TAG_BLOCKS_MOTION_IN_HEIGHTMAP_NO_LEAVES).expect("valid tag id");
+        let uncarvable_tag = Identifier::parse(TAG_UNCARVABLE).expect("valid tag id");
 
         let block_count = blocks.blocks().len();
         let mut block_flags = vec![0u8; block_count];
@@ -238,12 +250,22 @@ impl BlockPredicates {
                 }
             }
         }
+        if let Some(ids) = tags.block_ids(&uncarvable_tag) {
+            for &bid in ids {
+                if let Some(slot) = block_flags.get_mut(bid as usize) {
+                    *slot |= FLAG_UNCARVABLE;
+                }
+            }
+        }
 
         let mut state_flags = vec![0u8; blocks.len()];
         for entry in blocks.blocks() {
             let mut base = block_flags[entry.block_protocol_id as usize];
             if entry.id == air_block || entry.id == cave_air_block || entry.id == void_air_block {
                 base |= FLAG_IS_AIR;
+            }
+            if entry.id == grass_block || entry.id == mycelium_block {
+                base |= FLAG_GRASS_OR_MYCELIUM;
             }
             if entry.id == water_block {
                 base |= FLAG_IS_WATER | FLAG_HAS_FLUID;
@@ -281,6 +303,7 @@ impl BlockPredicates {
             air_id,
             water_id,
             lava_id,
+            dirt_id,
             state_flags,
         })
     }
@@ -303,6 +326,12 @@ impl BlockPredicates {
         self.lava_id
     }
 
+    /// Global block-state ID of `minecraft:dirt`'s default state, if present in the block table.
+    #[inline]
+    pub const fn dirt_id(&self) -> Option<u32> {
+        self.dirt_id
+    }
+
     #[inline]
     fn flags(&self, state_id: u32) -> u8 {
         self.state_flags
@@ -323,6 +352,12 @@ impl BlockPredicates {
         (self.flags(state_id) & FLAG_HAS_FLUID) != 0
     }
 
+    /// `isStone(state)` in `MaterialSystem.buildSurface`: `!state.isAir() && state.getFluidState().isEmpty()`.
+    #[inline]
+    pub fn is_stone(&self, state_id: u32) -> bool {
+        (self.flags(state_id) & (FLAG_IS_AIR | FLAG_HAS_FLUID)) == 0
+    }
+
     /// `state.is(Blocks.WATER)`.
     #[inline]
     pub fn is_water(&self, state_id: u32) -> bool {
@@ -333,6 +368,18 @@ impl BlockPredicates {
     #[inline]
     pub fn is_lava(&self, state_id: u32) -> bool {
         (self.flags(state_id) & FLAG_IS_LAVA) != 0
+    }
+
+    /// `state.is(#minecraft:uncarvable)`.
+    #[inline]
+    pub fn is_uncarvable(&self, state_id: u32) -> bool {
+        (self.flags(state_id) & FLAG_UNCARVABLE) != 0
+    }
+
+    /// `state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.MYCELIUM)`.
+    #[inline]
+    pub fn is_grass_or_mycelium(&self, state_id: u32) -> bool {
+        (self.flags(state_id) & FLAG_GRASS_OR_MYCELIUM) != 0
     }
 
     /// Evaluates `Heightmap.Types::isOpaque` for `kind` and `state_id` (26.3 predicates).

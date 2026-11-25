@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+zenith-biome = { path = "../zenith-biome" }
 zenith-codec = { path = "../zenith-codec" }
 zenith-math = { path = "../zenith-math" }
 zenith-registry = { path = "../zenith-registry" }

@@ -78,6 +78,13 @@ enum ParityCmd {
         #[arg(long)]
         write: bool,
     },
+    /// M7 stage 4: full `terrain`-status chunks (blocks, biomes, 6 heightmaps, post-processing, ticks) vs the game's.
+    GoldenTerrain {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Text components: decode, JSON + NBT re-encode and plain-string flattening vs the game's own.
     TextComponent {
         #[arg(long, default_value = "26.3")]
@@ -215,6 +222,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::WorldgenColumns { version, write },
         } => parity_terrain::worldgen_columns(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::GoldenTerrain { version, write },
+        } => parity_terrain::golden_terrain(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::TextComponent { version, write },
         } => parity_text::text_component(&version, write),

@@ -305,12 +305,26 @@ pub fn dump_chunks(
         );
     }
     let (install, java) = install_and_java(version)?;
-    let agent = build(version)?;
+    // Parallel callers share one agent build and get distinct run folders.
+    static AGENT: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+    static RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let agent = {
+        let mut a = AGENT.lock().expect("agent lock");
+        match a.as_ref() {
+            Some(p) => p.clone(),
+            None => {
+                let p = build(version)?;
+                *a = Some(p.clone());
+                p
+            }
+        }
+    };
     let cp = game_classpath(&install)?;
     let run_dir = zenith_install::cache_dir().join("oracle").join(format!(
-        "chunks-{}-{}",
+        "chunks-{}-{}-{}",
         chrono::Utc::now().format("%Y%m%d-%H%M%S%3f"),
-        std::process::id()
+        std::process::id(),
+        RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(&run_dir)?;
     fs::write(run_dir.join("eula.txt"), "eula=true\n")?;
