@@ -2,19 +2,21 @@
 //! game's own, on our hand-made edge cases, every translation key in the user's jar and every component-like value
 //! found in the jar's data files. The corpus is built at run time and never stored.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 
 use anyhow::Context;
 use zenith_codec::codec::DataResult;
 use zenith_codec::json::{Json, ParseMode, parse_bytes};
+use zenith_components::registry_context::{RegistryContext, RegistryLookup};
 use zenith_components::text::{
     LanguageTable, decode_component_json, decode_component_nbt, encode_component_json,
     encode_component_nbt, flatten_plain_utf16, flatten_truncated_utf16,
 };
 use zenith_nbt::Accounter;
 use zenith_parity::SuiteResult;
+use zenith_registry::Identifier;
 
 use crate::parity::{json_canonical, vanilla_command};
 use crate::repo_root;
@@ -381,9 +383,75 @@ fn success<T>(r: DataResult<T>) -> Option<T> {
     }
 }
 
+/// Registry context for the parity suite: static registries from `zenith_data::Tables` and
+/// dynamic registries backed by the jar's `data/<id-namespace>/<registry-path>/<id-path>.json`
+/// files (spec A.6.4).
+struct SuiteRegistries {
+    static_regs: HashMap<String, HashSet<String>>,
+    jar_data_files: HashSet<String>,
+    present_dynamic_dirs: HashSet<String>,
+}
+
+impl SuiteRegistries {
+    fn new(tables: &zenith_data::Tables, jar_data_names: &[String]) -> Self {
+        let mut static_regs = HashMap::with_capacity(tables.registries.len());
+        for reg in &tables.registries {
+            let entries: HashSet<String> = reg.entries.iter().map(|e| e.name.clone()).collect();
+            static_regs.insert(reg.name.clone(), entries);
+        }
+        let mut jar_data_files = HashSet::with_capacity(jar_data_names.len());
+        let mut present_dynamic_dirs = HashSet::new();
+        for name in jar_data_names {
+            jar_data_files.insert(name.clone());
+            if let Some(after_data) = name.strip_prefix("data/")
+                && let Some((_, rest)) = after_data.split_once('/')
+            {
+                for (idx, b) in rest.bytes().enumerate() {
+                    if b == b'/' {
+                        present_dynamic_dirs.insert(rest[..idx].to_owned());
+                    }
+                }
+            }
+        }
+        Self {
+            static_regs,
+            jar_data_files,
+            present_dynamic_dirs,
+        }
+    }
+}
+
+impl RegistryContext for SuiteRegistries {
+    fn lookup(&self, registry: &Identifier, id: &Identifier) -> RegistryLookup {
+        let reg_key = registry.to_string();
+        if let Some(entries) = self.static_regs.get(&reg_key) {
+            return if entries.contains(&id.to_string()) {
+                RegistryLookup::Present
+            } else {
+                RegistryLookup::Missing
+            };
+        }
+        let reg_path = registry.path();
+        if !self.present_dynamic_dirs.contains(reg_path) {
+            return RegistryLookup::Unavailable;
+        }
+        let file = format!("data/{}/{}/{}.json", id.namespace(), reg_path, id.path());
+        if self.jar_data_files.contains(&file) {
+            RegistryLookup::Present
+        } else {
+            RegistryLookup::Missing
+        }
+    }
+}
+
 /// Zenith's outcome for one input. `vanilla_nbt` is the game's own NBT for this input, so the NBT decode path is
 /// checked independently of our NBT encoder.
-fn zenith_outcome(input: &[u8], lang: &LanguageTable, vanilla_nbt: Option<&[u8]>) -> Outcome {
+fn zenith_outcome(
+    input: &[u8],
+    lang: &LanguageTable,
+    registries: &dyn RegistryContext,
+    vanilla_nbt: Option<&[u8]>,
+) -> Outcome {
     let failed = |status| Outcome {
         status,
         json: None,
@@ -395,7 +463,7 @@ fn zenith_outcome(input: &[u8], lang: &LanguageTable, vanilla_nbt: Option<&[u8]>
     let Ok(tree) = parse_bytes(input, ParseMode::Data) else {
         return failed(2);
     };
-    let Some(c) = success(decode_component_json(&tree)) else {
+    let Some(c) = success(decode_component_json(&tree, registries)) else {
         return failed(1);
     };
     let json = success(encode_component_json(&c)).map(|j| canonical(&j));
@@ -407,7 +475,7 @@ fn zenith_outcome(input: &[u8], lang: &LanguageTable, vanilla_nbt: Option<&[u8]>
                 .ok()
                 .flatten()
         })
-        .and_then(|t| success(decode_component_nbt(&t)))
+        .and_then(|t| success(decode_component_nbt(&t, registries)))
         .and_then(|c| success(encode_component_json(&c)))
         .map(|j| canonical(&j));
     Outcome {
@@ -518,10 +586,21 @@ pub fn text_component(version: &str, write: bool) -> anyhow::Result<bool> {
         .context("no install")?;
     let mut zip = zip::ZipArchive::new(fs::File::open(&install.client_jar)?)?;
 
-    // The game's default language, read from the user's jar like the game does.
+    // The game's default language, read from the user's jar like the game does (en_us + deprecated).
     let mut lang_bytes = Vec::new();
     zip.by_name("assets/minecraft/lang/en_us.json")?
         .read_to_end(&mut lang_bytes)?;
+    let dep_bytes = match zip.by_name("assets/minecraft/lang/deprecated.json") {
+        Ok(mut f) => {
+            let mut b = Vec::new();
+            f.read_to_end(&mut b)?;
+            Some(b)
+        }
+        Err(zip::result::ZipError::FileNotFound) => None,
+        Err(e) => return Err(e.into()),
+    };
+    let lang = LanguageTable::from_default_json(&lang_bytes, dep_bytes.as_deref())
+        .map_err(anyhow::Error::msg)?;
     let lang_json = parse_bytes(&lang_bytes, ParseMode::Data).context("parse en_us.json")?;
     let Json::Object(lang_obj) = &lang_json else {
         anyhow::bail!("en_us.json is not an object");
@@ -530,7 +609,6 @@ pub fn text_component(version: &str, write: bool) -> anyhow::Result<bool> {
         .iter()
         .filter_map(|(k, v)| Some((k.as_str()?, v.as_str()?)))
         .collect();
-    let lang = LanguageTable::from_lang_entries(entries.iter().copied());
 
     let mut labels: Vec<String> = Vec::new();
     let mut inputs: Vec<Vec<u8>> = Vec::new();
@@ -576,6 +654,10 @@ pub fn text_component(version: &str, write: bool) -> anyhow::Result<bool> {
         inputs.push(s.into_bytes());
     }
 
+    let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
+        .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
+    let registries = SuiteRegistries::new(&tables, &names);
+
     let raw = run_text_check(version, &inputs)?;
     let mut reader = Reader { raw: &raw, at: 0 };
     let (mut passed, mut total) = (0u64, 0u64);
@@ -587,7 +669,7 @@ pub fn text_component(version: &str, write: bool) -> anyhow::Result<bool> {
         .unwrap_or(20);
     for (i, input) in inputs.iter().enumerate() {
         let v = reader.outcome()?;
-        let z = zenith_outcome(input, &lang, v.nbt.as_deref());
+        let z = zenith_outcome(input, &lang, &registries, v.nbt.as_deref());
         total += 1;
         if v == z {
             passed += 1;

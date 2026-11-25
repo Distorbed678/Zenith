@@ -14,6 +14,7 @@ use super::{
     SelectorContent, Translatable, TranslationArg,
 };
 use crate::nbt_path::NbtPath;
+use crate::registry_context::{NoRegistries, RegistryContext};
 
 /// Default resolution depth limit for commands, signs, text displays, books, loot, and boss bars (spec A.9.2).
 pub const DEFAULT_DEPTH_LIMIT: usize = 100;
@@ -146,6 +147,8 @@ pub struct ResolveContext<'a> {
     pub default_score_holder: Option<String>,
     /// Object filter (e.g. [`AllowAllObjects`] or [`MotdObjectFilter`]).
     pub object_filter: &'a dyn ObjectFilter,
+    /// Registry context used when `nbt` `interpret` decodes nested NBT components.
+    pub registries: &'a dyn RegistryContext,
     /// Warnings emitted during resolution (e.g. skipped invalid `nbt` `interpret` tags).
     pub warnings: Vec<String>,
 }
@@ -168,6 +171,7 @@ impl<'a> ResolveContext<'a> {
     /// Standard server context (depth 100, copy unresolved, source present, optional `*` holder override).
     pub fn server(source: &'a dyn ResolveSource, default_score_holder: Option<String>) -> Self {
         static ALLOW_ALL: AllowAllObjects = AllowAllObjects;
+        static NO_REGISTRIES: NoRegistries = NoRegistries;
         Self {
             depth_limit: DEFAULT_DEPTH_LIMIT,
             on_depth_exceeded: DepthLimitBehavior::CopyUnresolved,
@@ -176,8 +180,15 @@ impl<'a> ResolveContext<'a> {
             source: Some(source),
             default_score_holder,
             object_filter: &ALLOW_ALL,
+            registries: &NO_REGISTRIES,
             warnings: Vec::new(),
         }
+    }
+
+    /// Sets the [`RegistryContext`] used when `nbt` `interpret` decodes NBT components.
+    pub fn with_registries(mut self, registries: &'a dyn RegistryContext) -> Self {
+        self.registries = registries;
+        self
     }
 
     /// Boss-bar name context (depth 100, copy unresolved, no `*` override entity; spec A.9.2).
@@ -188,6 +199,7 @@ impl<'a> ResolveContext<'a> {
     /// Client server-list MOTD sanitizing context (depth 16, `...`, no source, rejects `player` objects).
     pub fn motd() -> Self {
         static MOTD_FILTER: MotdObjectFilter = MotdObjectFilter;
+        static NO_REGISTRIES: NoRegistries = NoRegistries;
         Self {
             depth_limit: MOTD_DEPTH_LIMIT,
             on_depth_exceeded: DepthLimitBehavior::Ellipsis,
@@ -196,6 +208,7 @@ impl<'a> ResolveContext<'a> {
             source: None,
             default_score_holder: None,
             object_filter: &MOTD_FILTER,
+            registries: &NO_REGISTRIES,
             warnings: Vec::new(),
         }
     }
@@ -403,7 +416,7 @@ fn resolve_nbt(
     let mut rendered = Vec::new();
     if nbt.interpret {
         for tag in &matched_tags {
-            match decode_component_nbt(tag).demand() {
+            match decode_component_nbt(tag, ctx.registries).demand() {
                 Ok(comp) => {
                     rendered.push(resolve_at_depth(&comp, ctx, next_depth)?);
                 }

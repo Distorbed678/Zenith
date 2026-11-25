@@ -707,6 +707,13 @@ The `text-component` suite does not test tags yet: its built-in lookup has no da
     discriminator helper, whose encoder always writes the compact (keyless) form; the key is only consulted on decode.
     Exception: with map-compressing ops (none on any 26.3 text path) the keyed form is used for both directions.
     The current implementation is correct.
+15. **(implementer) Registry-context checks for resource-key-like fields in B.7:** B.7 describes `recipes` ("list of
+    recipe ids"), `container_loot.loot_table` ("`loot_table` id"), `lodestone_tracker.target.dimension` (`dimension`),
+    and `compostable` / `cooking_fuel` / `brewing_fuel` provider ids ("context-int-provider id" / "provider id") as ids
+    rather than holders, and block/item predicates (`can_place_on`, `can_break`, `lock`) are not yet decoded past raw
+    maps. Confirm whether any of those id fields are validated against a registry on decode (e.g. `minecraft:recipe`,
+    `minecraft:loot_table`, `minecraft:dimension`, `minecraft:context_int_provider`,
+    `minecraft:context_float_provider`) or remain unchecked resource keys; they are currently left unchecked.
 
 ## Reader review (2026-11-25)
 Twelve rules marked **[oracle]** come from the game's bundled serialization and JSON libraries rather than its own

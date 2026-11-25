@@ -11,6 +11,7 @@ use super::codec::{decode_component_value, encode_component_value};
 use super::registry::ComponentTypeId;
 use super::types::ComponentValue;
 use crate::dynval::{Dyn, MapBuilder, read_map};
+use crate::registry_context::RegistryContext;
 
 /// An immutable component map (used as an item type's prototype and for full component maps).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -55,7 +56,7 @@ impl ComponentMap {
     }
 
     /// Decodes a full component map (no `!` removal keys allowed; spec B.4).
-    pub fn decode(d: &Dyn) -> DataResult<Self> {
+    pub fn decode(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Self> {
         let entries = match read_map(d) {
             DataResult::Success(m) => m,
             other => return other.map(|_| Self::new()),
@@ -75,7 +76,7 @@ impl ComponentMap {
                 errors.push(format!("{ty} is not a persistent component"));
                 continue;
             }
-            match decode_component_value(ty, val) {
+            match decode_component_value(ty, val, registries) {
                 DataResult::Success(v) => map.insert(ty, v),
                 DataResult::Error { message, partial } => {
                     errors.push(format!("{ty}: {message}"));
@@ -208,7 +209,7 @@ impl ComponentPatch {
     /// Both `"x"` and `"!x"` in one input map are distinct keys; entries are processed in input map
     /// iteration order and the last processed entry wins. Partial results keep good entries.
     // PARITY [oracle]: settled by the text-component suite (spec open questions 1 & 5: partial results and duplicate set/remove key order).
-    pub fn decode(d: &Dyn) -> DataResult<Self> {
+    pub fn decode(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Self> {
         let entries = match read_map(d) {
             DataResult::Success(m) => m,
             other => return other.map(|_| Self::new()),
@@ -242,7 +243,7 @@ impl ComponentPatch {
                 }
                 patch.remove(ty);
             } else {
-                match decode_component_value(ty, val) {
+                match decode_component_value(ty, val, registries) {
                     DataResult::Success(v) => patch.set(ty, v),
                     DataResult::Error { message, partial } => {
                         errors.push(format!("{ty}: {message}"));
@@ -262,13 +263,13 @@ impl ComponentPatch {
     }
 
     /// Decodes a patch from [`Json`].
-    pub fn decode_json(json: &Json) -> DataResult<Self> {
-        Self::decode(&Dyn::from_json(json))
+    pub fn decode_json(json: &Json, registries: &dyn RegistryContext) -> DataResult<Self> {
+        Self::decode(&Dyn::from_json(json), registries)
     }
 
     /// Decodes a patch from an NBT [`Tag`].
-    pub fn decode_nbt(tag: &Tag) -> DataResult<Self> {
-        Self::decode(&Dyn::from_tag(tag))
+    pub fn decode_nbt(tag: &Tag, registries: &dyn RegistryContext) -> DataResult<Self> {
+        Self::decode(&Dyn::from_tag(tag), registries)
     }
 
     /// Encodes a patch to [`Dyn`] (spec B.4 rule 3): writes every non-transient entry (`id` for sets,

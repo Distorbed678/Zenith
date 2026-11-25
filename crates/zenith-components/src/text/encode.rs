@@ -15,7 +15,6 @@ use crate::profile::encode_profile;
 /// - Plain literal with empty style and no siblings collapses to a bare string.
 /// - Otherwise encodes as a map: content fields (never writing `type`), `extra` if non-empty,
 ///   then each set style field.
-// PARITY [oracle]: settled by the text-component suite (spec open question 3: JSON key order).
 pub fn encode_component(c: &Component) -> DataResult<Dyn> {
     if let Some(s) = c.as_plain_literal() {
         return DataResult::Success(Dyn::Str(s.clone()));
@@ -93,10 +92,10 @@ pub fn encode_component(c: &Component) -> DataResult<Dyn> {
         Content::Object(o) => {
             match &o.info {
                 ObjectInfo::Atlas { sprite, atlas } => {
-                    b.put("sprite", Dyn::string(sprite.to_string()));
                     if *atlas != default_atlas() {
                         b.put("atlas", Dyn::string(atlas.to_string()));
                     }
+                    b.put("sprite", Dyn::string(sprite.to_string()));
                 }
                 ObjectInfo::Player { profile, hat } => {
                     match encode_profile(profile) {

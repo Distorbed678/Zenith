@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use zenith_codec::json::{Json, ParseMode, parse_bytes};
 use zenith_nbt::NbtString;
 
 use super::{Component, Translatable, TranslationArg};
@@ -60,6 +61,77 @@ impl LanguageTable {
             t.insert_lang_entry(k, v);
         }
         t
+    }
+
+    /// Builds the built-in default language table from `en_us.json` bytes plus optional
+    /// `deprecated.json` bytes (spec A.7.1 rule 4).
+    ///
+    /// 1. Every entry in `en_us_bytes` is loaded with [`rewrite_lang_value`] applied.
+    /// 2. If `deprecated_bytes` is `Some`:
+    ///    - Every key in `removed` is deleted first.
+    ///    - Every `(old_key, new_key)` pair in `renamed` is applied in document order: the value
+    ///      under `old_key` is taken out; if present it is stored under `new_key` (replacing any
+    ///      existing value), otherwise `new_key` is deleted as well.
+    pub fn from_default_json(
+        en_us_bytes: &[u8],
+        deprecated_bytes: Option<&[u8]>,
+    ) -> Result<Self, String> {
+        let en_us = parse_bytes(en_us_bytes, ParseMode::Data)
+            .map_err(|e| format!("Invalid en_us.json: {e}"))?;
+        let Json::Object(en_us_obj) = en_us else {
+            return Err("en_us.json root must be a JSON object".to_owned());
+        };
+        let mut table = Self::new();
+        for (k, v) in en_us_obj.iter() {
+            let Json::String(val) = v else {
+                return Err(format!("en_us.json entry '{k}' is not a string"));
+            };
+            table.insert_lang_entry(k.to_string_lossy().into_owned(), &val.to_string_lossy());
+        }
+
+        if let Some(dep_bytes) = deprecated_bytes {
+            let dep = parse_bytes(dep_bytes, ParseMode::Data)
+                .map_err(|e| format!("Invalid deprecated.json: {e}"))?;
+            let Json::Object(dep_obj) = dep else {
+                return Err("deprecated.json root must be a JSON object".to_owned());
+            };
+            if let Some(removed) = dep_obj.get("removed")
+                && !matches!(removed, Json::Null)
+            {
+                let Json::Array(keys) = removed else {
+                    return Err("deprecated.json 'removed' must be a JSON array".to_owned());
+                };
+                for item in keys {
+                    let Json::String(k) = item else {
+                        return Err("deprecated.json 'removed' entries must be strings".to_owned());
+                    };
+                    table.entries.remove(k.to_string_lossy().as_ref());
+                }
+            }
+            if let Some(renamed) = dep_obj.get("renamed")
+                && !matches!(renamed, Json::Null)
+            {
+                let Json::Object(pairs) = renamed else {
+                    return Err("deprecated.json 'renamed' must be a JSON object".to_owned());
+                };
+                for (old_k, new_v) in pairs.iter() {
+                    let Json::String(new_k) = new_v else {
+                        return Err(format!(
+                            "deprecated.json 'renamed' target for '{old_k}' is not a string"
+                        ));
+                    };
+                    let old_key = old_k.to_string_lossy();
+                    let new_key = new_k.to_string_lossy();
+                    if let Some(val) = table.entries.remove(old_key.as_ref()) {
+                        table.entries.insert(new_key.into_owned(), val);
+                    } else {
+                        table.entries.remove(new_key.as_ref());
+                    }
+                }
+            }
+        }
+
+        Ok(table)
     }
 }
 

@@ -10,10 +10,12 @@
 //! * [`profile`]: player profile value shared by `profile` components and `object` player contents.
 //! * [`nbt_path`]: command NBT-path parser and query engine.
 //! * [`dynval`]: format-neutral value tree bridging `zenith-codec`'s JSON layer and `zenith-nbt`.
+//! * [`registry_context`]: registry-membership lookup trait used during component decoding.
 
 pub mod dynval;
 pub mod grammar;
 pub mod item;
 pub mod nbt_path;
 pub mod profile;
+pub mod registry_context;
 pub mod text;

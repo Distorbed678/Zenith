@@ -7,6 +7,7 @@ use zenith_registry::Identifier;
 
 use zenith_components::dynval::Dyn;
 use zenith_components::item::*;
+use zenith_components::registry_context::AllowAllRegistries;
 use zenith_components::text::*;
 
 fn id(s: &str) -> Identifier {
@@ -14,18 +15,24 @@ fn id(s: &str) -> Identifier {
 }
 
 fn roundtrip_text(json_str: &str) -> Component {
-    let c1 = decode_component_str_json(json_str).demand().unwrap();
+    let c1 = decode_component_str_json(json_str, &AllowAllRegistries)
+        .demand()
+        .unwrap();
     // JSON -> model -> JSON -> model
     let j = encode_component_json(&c1).demand().unwrap();
-    let c2 = decode_component_json(&j).demand().unwrap();
+    let c2 = decode_component_json(&j, &AllowAllRegistries)
+        .demand()
+        .unwrap();
     assert_eq!(c1, c2, "JSON roundtrip mismatch for {json_str}");
     // model -> NBT -> model
     let nbt = encode_component_nbt(&c1).demand().unwrap();
-    let c3 = decode_component_nbt(&nbt).demand().unwrap();
+    let c3 = decode_component_nbt(&nbt, &AllowAllRegistries)
+        .demand()
+        .unwrap();
     assert_eq!(c1, c3, "NBT roundtrip mismatch for {json_str}");
     // model -> network NBT bytes -> model
     let net = encode_component_network_nbt(&c1).unwrap();
-    let c4 = decode_component_network_nbt(&net).unwrap();
+    let c4 = decode_component_network_nbt(&net, &AllowAllRegistries).unwrap();
     assert_eq!(c1, c4, "Network NBT roundtrip mismatch for {json_str}");
     c1
 }
@@ -40,13 +47,21 @@ fn text_json_model_nbt_roundtrip_all_kinds_styles_and_events() {
         r#"{"translate":"chat.type.text","fallback":"<%s> %s","with":["Steve",{"text":"Hi!","bold":true},42,1.5]}"#,
     );
     // JSON `true` stays Bool(true) across JSON round-trip, and becomes Byte(1) across NBT (spec A.7.3, edge case 28).
-    let with_bool = decode_component_str_json(r#"{"translate":"%s","with":[true]}"#)
+    let with_bool =
+        decode_component_str_json(r#"{"translate":"%s","with":[true]}"#, &AllowAllRegistries)
+            .demand()
+            .unwrap();
+    let j_bool = encode_component_json(&with_bool).demand().unwrap();
+    assert_eq!(
+        decode_component_json(&j_bool, &AllowAllRegistries)
+            .demand()
+            .unwrap(),
+        with_bool
+    );
+    let nbt_bool = encode_component_nbt(&with_bool).demand().unwrap();
+    let from_nbt_bool = decode_component_nbt(&nbt_bool, &AllowAllRegistries)
         .demand()
         .unwrap();
-    let j_bool = encode_component_json(&with_bool).demand().unwrap();
-    assert_eq!(decode_component_json(&j_bool).demand().unwrap(), with_bool);
-    let nbt_bool = encode_component_nbt(&with_bool).demand().unwrap();
-    let from_nbt_bool = decode_component_nbt(&nbt_bool).demand().unwrap();
     assert_eq!(flatten_plain(&from_nbt_bool, &EmptyLanguage, None), "1");
     roundtrip_text(r#"{"keybind":"key.jump","color":"yellow"}"#);
     roundtrip_text(r#"{"score":{"name":"@p","objective":"health"}}"#);
@@ -386,7 +401,7 @@ fn component_catalog_json_model_nbt_roundtrips() {
 
     for &(ty, raw_json) in cases {
         let j = parse(raw_json, ParseMode::Data).unwrap();
-        let val = decode_component_value(ty, &Dyn::from_json(&j))
+        let val = decode_component_value(ty, &Dyn::from_json(&j), &AllowAllRegistries)
             .demand()
             .unwrap_or_else(|e| panic!("{ty} decode failed on {raw_json}: {e}"));
         let enc_dyn = encode_component_value(ty, &val)
@@ -394,15 +409,17 @@ fn component_catalog_json_model_nbt_roundtrips() {
             .unwrap_or_else(|e| panic!("{ty} encode failed: {e}"));
         // Re-decode from JSON
         let enc_json = enc_dyn.to_json().unwrap();
-        let val_from_json = decode_component_value(ty, &Dyn::from_json(&enc_json))
-            .demand()
-            .unwrap_or_else(|e| panic!("{ty} re-decode JSON failed: {e}"));
+        let val_from_json =
+            decode_component_value(ty, &Dyn::from_json(&enc_json), &AllowAllRegistries)
+                .demand()
+                .unwrap_or_else(|e| panic!("{ty} re-decode JSON failed: {e}"));
         assert_eq!(val, val_from_json, "JSON roundtrip mismatch for {ty}");
         // Re-decode from NBT
         let enc_nbt = enc_dyn.to_tag().unwrap();
-        let val_from_nbt = decode_component_value(ty, &Dyn::from_tag(&enc_nbt))
-            .demand()
-            .unwrap_or_else(|e| panic!("{ty} re-decode NBT failed: {e}"));
+        let val_from_nbt =
+            decode_component_value(ty, &Dyn::from_tag(&enc_nbt), &AllowAllRegistries)
+                .demand()
+                .unwrap_or_else(|e| panic!("{ty} re-decode NBT failed: {e}"));
         assert_eq!(val, val_from_nbt, "NBT roundtrip mismatch for {ty}");
     }
 }
@@ -556,20 +573,20 @@ fn network_patch_delimited_transient_and_hashed_stack_vectors() {
 
     let mut wire = Vec::new();
     encode_patch_network(&patch, &mut wire).unwrap();
-    let (dec, used) = decode_patch_network(&wire).unwrap();
+    let (dec, used) = decode_patch_network(&wire, &AllowAllRegistries).unwrap();
     assert_eq!(used, wire.len());
     assert_eq!(dec, patch);
 
     // Delimited patch: trailing unconsumed byte inside a delimited slice fails!
     let mut delim = Vec::new();
     encode_patch_delimited(&patch, &mut delim).unwrap();
-    let (dec_d, used_d) = decode_patch_delimited(&delim).unwrap();
+    let (dec_d, used_d) = decode_patch_delimited(&delim, &AllowAllRegistries).unwrap();
     assert_eq!(used_d, delim.len());
     assert_eq!(dec_d, patch);
 
     // Corrupt a delimited length by +1 (extra byte) -> must fail.
     let bad_delim = vec![1, 0, 1, 2, 16, 0]; // 1 set, 0 rem, id=1 (max_stack_size), len=2, val=16 + extra 0
-    assert!(decode_patch_delimited(&bad_delim).is_err());
+    assert!(decode_patch_delimited(&bad_delim, &AllowAllRegistries).is_err());
 
     // HashedStack matching and network round-trip.
     struct DummyHasher;

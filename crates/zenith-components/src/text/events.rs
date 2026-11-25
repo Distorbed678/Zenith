@@ -10,6 +10,7 @@ use super::encode::encode_component;
 use crate::dynval::{Dyn, MapBuilder, Num, Rec, read_identifier, read_int, read_string};
 use crate::grammar::{format_uuid, parse_uri_scheme, parse_uuid_lenient};
 use crate::item::ItemTemplate;
+use crate::registry_context::{RegistryContext, ids as reg_ids, read_registry_id};
 
 /// A dialog reference of `show_dialog`.
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +107,7 @@ pub fn read_uuid(d: &Dyn) -> DataResult<[i32; 4]> {
 }
 
 /// Decodes `click_event`.
-pub fn decode_click_event(d: &Dyn) -> DataResult<ClickEvent> {
+pub fn decode_click_event(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<ClickEvent> {
     let mut r = Rec::new(d);
     let action = r.required("action", read_string);
     let Some(action) = action else {
@@ -136,7 +137,7 @@ pub fn decode_click_event(d: &Dyn) -> DataResult<ClickEvent> {
             .map(ClickEvent::SuggestCommand),
         "show_dialog" => r
             .required("dialog", |v| match v {
-                Dyn::Str(_) => read_identifier(v).map(Dialog::Id),
+                Dyn::Str(_) => read_registry_id(v, reg_ids::dialog(), registries).map(Dialog::Id),
                 Dyn::Map(_) => DataResult::Success(Dialog::Inline(v.clone())),
                 other => DataResult::error(format!("Not a dialog: {}", other.kind())),
             })
@@ -171,56 +172,58 @@ pub fn decode_click_event(d: &Dyn) -> DataResult<ClickEvent> {
     r.finish(|| ev)
 }
 
-/// Encodes `click_event` (fails for `open_file`).
+/// Encodes `click_event` (fails for `open_file`). Dispatched objects write action-specific fields
+/// first and the `action` discriminator last (spec A.6.2 rule 4).
 pub fn encode_click_event(e: &ClickEvent) -> DataResult<Dyn> {
     let mut b = MapBuilder::new();
     let s = |v: &str| Dyn::string(v);
     match e {
         ClickEvent::OpenUrl(u) => {
-            b.put("action", s("open_url")).put("url", s(u));
+            b.put("url", s(u)).put("action", s("open_url"));
         }
         ClickEvent::OpenFile(_) => return DataResult::error("Action not allowed: open_file"),
         ClickEvent::RunCommand(c) => {
-            b.put("action", s("run_command")).put("command", s(c));
+            b.put("command", s(c)).put("action", s("run_command"));
         }
         ClickEvent::SuggestCommand(c) => {
-            b.put("action", s("suggest_command")).put("command", s(c));
+            b.put("command", s(c)).put("action", s("suggest_command"));
         }
         ClickEvent::ShowDialog(d) => {
             let v = match d {
                 Dialog::Id(id) => s(&id.to_string()),
                 Dialog::Inline(d) => d.clone(),
             };
-            b.put("action", s("show_dialog")).put("dialog", v);
+            b.put("dialog", v).put("action", s("show_dialog"));
         }
         ClickEvent::ChangePage(p) => {
-            b.put("action", s("change_page"))
-                .put("page", Dyn::Num(Num::Int(*p)));
+            b.put("page", Dyn::Num(Num::Int(*p)))
+                .put("action", s("change_page"));
         }
         ClickEvent::CopyToClipboard(v) => {
-            b.put("action", s("copy_to_clipboard")).put("value", s(v));
+            b.put("value", s(v)).put("action", s("copy_to_clipboard"));
         }
         ClickEvent::Custom { id, payload } => {
-            b.put("action", s("custom")).put("id", s(&id.to_string()));
+            b.put("id", s(&id.to_string()));
             if let Some(p) = payload {
                 b.put("payload", Dyn::from_tag(p));
             }
+            b.put("action", s("custom"));
         }
     }
     DataResult::Success(b.build())
 }
 
 /// Decodes `hover_event`.
-pub fn decode_hover_event(d: &Dyn) -> DataResult<HoverEvent> {
+pub fn decode_hover_event(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<HoverEvent> {
     let mut r = Rec::new(d);
     let Some(action) = r.required("action", read_string) else {
         return r.finish(|| None);
     };
     let ev = match action.as_str() {
         "show_text" => r
-            .required("value", decode_component)
+            .required("value", |v| decode_component(v, registries))
             .map(|c| HoverEvent::ShowText(Box::new(c))),
-        "show_item" => match ItemTemplate::decode_record(d) {
+        "show_item" => match ItemTemplate::decode_record(d, registries) {
             DataResult::Success(t) => Some(HoverEvent::ShowItem(Box::new(t))),
             DataResult::Error { message, .. } => {
                 r.push_error(message);
@@ -229,9 +232,11 @@ pub fn decode_hover_event(d: &Dyn) -> DataResult<HoverEvent> {
             DataResult::Failure(m) => return DataResult::Failure(m),
         },
         "show_entity" => {
-            let id = r.required("id", read_identifier);
+            let id = r.required("id", |v| {
+                read_registry_id(v, reg_ids::entity_type(), registries)
+            });
             let uuid = r.required("uuid", read_uuid);
-            let name = r.optional_opt("name", decode_component);
+            let name = r.optional_opt("name", |v| decode_component(v, registries));
             match (id, uuid) {
                 (Some(id), Some(uuid)) => Some(HoverEvent::ShowEntity {
                     id,
@@ -249,7 +254,8 @@ pub fn decode_hover_event(d: &Dyn) -> DataResult<HoverEvent> {
     r.finish(|| ev)
 }
 
-/// Encodes `hover_event`.
+/// Encodes `hover_event`. Dispatched objects write action-specific fields first and the `action`
+/// discriminator last (spec A.6.2 rule 4).
 pub fn encode_hover_event(e: &HoverEvent) -> DataResult<Dyn> {
     let mut b = MapBuilder::new();
     match e {
@@ -258,23 +264,22 @@ pub fn encode_hover_event(e: &HoverEvent) -> DataResult<Dyn> {
                 Ok(v) => v,
                 Err(e) => return DataResult::error(e.message),
             };
-            b.put("action", Dyn::string("show_text")).put("value", v);
+            b.put("value", v).put("action", Dyn::string("show_text"));
         }
         HoverEvent::ShowItem(t) => {
             let rec = match t.encode_record().demand() {
                 Ok(v) => v,
                 Err(e) => return DataResult::error(e.message),
             };
-            b.put("action", Dyn::string("show_item"));
             if let Dyn::Map(m) = rec {
                 for (k, v) in m {
                     b.put(k, v);
                 }
             }
+            b.put("action", Dyn::string("show_item"));
         }
         HoverEvent::ShowEntity { id, uuid, name } => {
-            b.put("action", Dyn::string("show_entity"))
-                .put("id", Dyn::string(id.to_string()))
+            b.put("id", Dyn::string(id.to_string()))
                 .put("uuid", Dyn::IntArray(uuid.to_vec()));
             if let Some(n) = name {
                 match encode_component(n).demand() {
@@ -284,6 +289,7 @@ pub fn encode_hover_event(e: &HoverEvent) -> DataResult<Dyn> {
                     Err(e) => return DataResult::error(e.message),
                 }
             }
+            b.put("action", Dyn::string("show_entity"));
         }
     }
     DataResult::Success(b.build())

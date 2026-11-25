@@ -151,29 +151,35 @@ impl Parser<'_> {
 
     fn parse_all(&mut self) -> Result<Vec<PathNode>, String> {
         let mut nodes = Vec::new();
+        // Spec A.2.2: parsing reads nodes until end-of-string or a space; anything remaining is
+        // a trailing-data error. The empty path "" has zero nodes and selects the root tag.
         if self.s.is_empty() {
-            return Err("Invalid NBT path: empty".to_owned());
+            return Ok(nodes);
         }
+        if self.peek() == Some(' ') {
+            return Err("Invalid NBT path: trailing data".to_owned());
+        }
+        let mut need_node = false;
         if self.peek() == Some('{') {
             let c = self.compound()?;
             nodes.push(PathNode::Root(c));
             // A separator is optional after the root filter.
             if self.peek() == Some('.') {
                 self.i += 1;
+                need_node = true;
             }
         }
-        let mut need_node = self.i < self.s.len() || nodes.is_empty();
-        while self.i < self.s.len() {
+        while self.i < self.s.len() && self.peek() != Some(' ') {
             match self.peek() {
                 Some('[') => nodes.push(self.bracket()?),
                 _ => nodes.push(self.key()?),
             }
             need_node = false;
             match self.peek() {
-                None => break,
+                None | Some(' ') => break,
                 Some('.') => {
                     self.i += 1;
-                    if self.i >= self.s.len() {
+                    if self.i >= self.s.len() || self.peek() == Some(' ') {
                         return Err("Invalid NBT path: trailing '.'".to_owned());
                     }
                     need_node = true;
@@ -184,6 +190,9 @@ impl Parser<'_> {
         }
         if need_node {
             return Err("Invalid NBT path".to_owned());
+        }
+        if self.i < self.s.len() {
+            return Err("Invalid NBT path: trailing data".to_owned());
         }
         Ok(nodes)
     }

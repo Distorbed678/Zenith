@@ -10,6 +10,7 @@ use zenith_registry::Identifier;
 use super::patch::ComponentMap;
 use super::stack::PrototypeRegistry;
 use crate::dynval::Dyn;
+use crate::registry_context::RegistryContext;
 
 /// Returns the cached `reports/minecraft/components/item` directory for a game version
 /// (`~/.cache/zenith/versions/<version>/reports/minecraft/components/item`).
@@ -25,7 +26,10 @@ pub fn cached_item_components_dir(version: &str) -> PathBuf {
 ///
 /// Each `<name>.json` file holds `{"components": { ... }}` printed by the game's persistent codecs.
 /// Returns a [`PrototypeRegistry`] binding `minecraft:<name>` to its decoded [`ComponentMap`].
-pub fn load_prototypes_from_dir(item_dir: &Path) -> Result<PrototypeRegistry, String> {
+pub fn load_prototypes_from_dir(
+    item_dir: &Path,
+    registries: &dyn RegistryContext,
+) -> Result<PrototypeRegistry, String> {
     let entries = fs::read_dir(item_dir).map_err(|e| {
         format!(
             "Failed to read item components dir {}: {e}",
@@ -58,7 +62,7 @@ pub fn load_prototypes_from_dir(item_dir: &Path) -> Result<PrototypeRegistry, St
         let Some(comps_dyn) = dyn_root.get("components") else {
             return Err(format!("{}: missing 'components' key", path.display()));
         };
-        let map = ComponentMap::decode(comps_dyn)
+        let map = ComponentMap::decode(comps_dyn, registries)
             .demand()
             .map_err(|e| format!("{}: {e}", path.display()))?;
         registry.bind(item_id, map);
@@ -67,6 +71,9 @@ pub fn load_prototypes_from_dir(item_dir: &Path) -> Result<PrototypeRegistry, St
 }
 
 /// Loads per-item default prototypes for an ingested game version from Zenith's local cache.
-pub fn load_prototypes_for_version(version: &str) -> Result<PrototypeRegistry, String> {
-    load_prototypes_from_dir(&cached_item_components_dir(version))
+pub fn load_prototypes_for_version(
+    version: &str,
+    registries: &dyn RegistryContext,
+) -> Result<PrototypeRegistry, String> {
+    load_prototypes_from_dir(&cached_item_components_dir(version), registries)
 }

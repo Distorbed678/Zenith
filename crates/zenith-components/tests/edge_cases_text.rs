@@ -1,16 +1,18 @@
 //! Spec edge cases 1–36 (Part A: Text components) from `docs/specs/codec/text-and-data-components.md`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use zenith_codec::json::{Json, ParseMode, parse};
 use zenith_nbt::{Compound, NbtString, Tag, parse_snbt};
 use zenith_registry::Identifier;
 
-use zenith_components::dynval::Dyn;
+use zenith_components::dynval::{Dyn, Num};
+use zenith_components::nbt_path::NbtPath;
+use zenith_components::registry_context::{NoRegistries, RegistryContext, RegistryLookup};
 use zenith_components::text::*;
 
 fn from_json(s: &str) -> Component {
-    decode_component_str_json(s)
+    decode_component_str_json(s, &NoRegistries)
         .demand()
         .unwrap_or_else(|e| panic!("expected valid JSON component for {s}: {e}"))
 }
@@ -21,7 +23,7 @@ fn to_json_str(c: &Component) -> String {
 
 fn from_snbt(s: &str) -> Component {
     let tag = parse_snbt(s).unwrap_or_else(|e| panic!("bad SNBT {s}: {e}"));
-    decode_component_nbt(&tag)
+    decode_component_nbt(&tag, &NoRegistries)
         .demand()
         .unwrap_or_else(|e| panic!("expected valid NBT component for {s}: {e}"))
 }
@@ -72,9 +74,13 @@ fn edge_01_bare_string_object_and_singleton_list_collapse_to_string() {
 
 #[test]
 fn edge_02_empty_list_and_empty_extra_are_decode_errors() {
-    assert!(decode_component_str_json("[]").demand().is_err());
     assert!(
-        decode_component_str_json(r#"{"text":"a","extra":[]}"#)
+        decode_component_str_json("[]", &NoRegistries)
+            .demand()
+            .is_err()
+    );
+    assert!(
+        decode_component_str_json(r#"{"text":"a","extra":[]}"#, &NoRegistries)
             .demand()
             .is_err()
     );
@@ -101,7 +107,7 @@ fn edge_04_kind_fallback_order_and_explicit_type_no_fallback() {
     assert!(matches!(c2.content, Content::Translatable(ref t) if t.key == "b"));
 
     assert!(
-        decode_component_str_json(r#"{"type":"keybind","text":"x"}"#)
+        decode_component_str_json(r#"{"type":"keybind","text":"x"}"#, &NoRegistries)
             .demand()
             .is_err()
     );
@@ -110,7 +116,7 @@ fn edge_04_kind_fallback_order_and_explicit_type_no_fallback() {
 #[test]
 fn edge_05_explicit_type_is_case_sensitive_with_no_fallback() {
     assert!(
-        decode_component_str_json(r#"{"type":"Text","text":"a"}"#)
+        decode_component_str_json(r#"{"type":"Text","text":"a"}"#, &NoRegistries)
             .demand()
             .is_err()
     );
@@ -139,7 +145,8 @@ fn edge_07_old_camelcase_click_and_hover_events_ignored() {
 fn edge_08_click_event_open_file_rejected_and_open_url_schemes() {
     assert!(
         decode_component_str_json(
-            r#"{"text":"a","click_event":{"action":"open_file","path":"/tmp/x"}}"#
+            r#"{"text":"a","click_event":{"action":"open_file","path":"/tmp/x"}}"#,
+            &NoRegistries
         )
         .demand()
         .is_err()
@@ -156,7 +163,12 @@ fn edge_08_click_event_open_file_rejected_and_open_url_schemes() {
         "example.com/no-scheme",
     ] {
         let s = format!(r#"{{"text":"a","click_event":{{"action":"open_url","url":"{bad}"}}}}"#);
-        assert!(decode_component_str_json(&s).demand().is_err(), "{bad}");
+        assert!(
+            decode_component_str_json(&s, &NoRegistries)
+                .demand()
+                .is_err(),
+            "{bad}"
+        );
     }
     let ok = from_json(
         r#"{"text":"a","click_event":{"action":"open_url","url":"HTTPS://example.com/ok"}}"#,
@@ -179,7 +191,10 @@ fn edge_09_run_command_rejects_unsafe_chars_copy_to_clipboard_accepts_any() {
             o.insert("click_event", Json::Object(ce));
             o
         });
-        assert!(decode_component_json(&j).demand().is_err(), "{bad:?}");
+        assert!(
+            decode_component_json(&j, &NoRegistries).demand().is_err(),
+            "{bad:?}"
+        );
     }
     let ok = from_json(
         r#"{"text":"a","click_event":{"action":"copy_to_clipboard","value":"§c\n\t\u007f"}}"#,
@@ -194,14 +209,16 @@ fn edge_09_run_command_rejects_unsafe_chars_copy_to_clipboard_accepts_any() {
 fn edge_10_change_page_requires_at_least_one() {
     assert!(
         decode_component_str_json(
-            r#"{"text":"a","click_event":{"action":"change_page","page":0}}"#
+            r#"{"text":"a","click_event":{"action":"change_page","page":0}}"#,
+            &NoRegistries
         )
         .demand()
         .is_err()
     );
     assert!(
         decode_component_str_json(
-            r#"{"text":"a","click_event":{"action":"change_page","page":-5}}"#
+            r#"{"text":"a","click_event":{"action":"change_page","page":-5}}"#,
+            &NoRegistries
         )
         .demand()
         .is_err()
@@ -262,29 +279,49 @@ fn edge_14_nbt_and_json_boolean_rules() {
     assert_eq!(from_snbt("{text:'a',bold:0.5f}").style.bold, Some(true));
     assert_eq!(from_snbt("{text:'a',bold:0.0d}").style.bold, Some(false));
     assert!(
-        decode_component_nbt(&parse_snbt("{text:'a',bold:'true'}").unwrap())
-            .demand()
-            .is_err()
+        decode_component_nbt(
+            &parse_snbt("{text:'a',bold:'true'}").unwrap(),
+            &NoRegistries
+        )
+        .demand()
+        .is_err()
     );
-    // JSON number -> boolean oracle hook (low 8 bits non-zero: 256 -> false, 257 -> true).
+    // Spec A.6.1 rule 9 & edge case 14: JSON booleans must be true/false; numbers are rejected.
+    for bad in [
+        r#"{"text":"a","bold":1}"#,
+        r#"{"text":"a","bold":0}"#,
+        r#"{"text":"a","bold":256}"#,
+        r#"{"text":"a","bold":0.5}"#,
+    ] {
+        assert!(
+            decode_component_str_json(bad, &NoRegistries)
+                .demand()
+                .is_err(),
+            "{bad}"
+        );
+    }
     assert_eq!(
-        from_json(r#"{"text":"a","bold":256}"#).style.bold,
-        Some(false)
-    );
-    assert_eq!(
-        from_json(r#"{"text":"a","bold":257}"#).style.bold,
+        from_json(r#"{"text":"a","bold":true}"#).style.bold,
         Some(true)
+    );
+    assert_eq!(
+        from_json(r#"{"text":"a","bold":false}"#).style.bold,
+        Some(false)
     );
 }
 
 #[test]
 fn edge_15_numbers_are_not_strings_in_nbt_or_json() {
     assert!(
-        decode_component_nbt(&parse_snbt("{text:5}").unwrap())
+        decode_component_nbt(&parse_snbt("{text:5}").unwrap(), &NoRegistries)
             .demand()
             .is_err()
     );
-    assert!(decode_component_str_json(r#"{"text":5}"#).demand().is_err());
+    assert!(
+        decode_component_str_json(r#"{"text":5}"#, &NoRegistries)
+            .demand()
+            .is_err()
+    );
 }
 
 #[test]
@@ -305,7 +342,7 @@ fn edge_16_lenient_vs_strict_optional_fields() {
     }
 
     assert!(
-        decode_component_str_json(r#"{"selector":"@p","separator":5}"#)
+        decode_component_str_json(r#"{"selector":"@p","separator":5}"#, &NoRegistries)
             .demand()
             .is_err()
     );
@@ -314,12 +351,15 @@ fn edge_16_lenient_vs_strict_optional_fields() {
 #[test]
 fn edge_17_nbt_interpret_and_plain_both_true_and_missing_source_fail() {
     assert!(
-        decode_component_str_json(r#"{"nbt":"a","entity":"@s","interpret":true,"plain":true}"#)
-            .demand()
-            .is_err()
+        decode_component_str_json(
+            r#"{"nbt":"a","entity":"@s","interpret":true,"plain":true}"#,
+            &NoRegistries
+        )
+        .demand()
+        .is_err()
     );
     assert!(
-        decode_component_str_json(r#"{"nbt":"a"}"#)
+        decode_component_str_json(r#"{"nbt":"a"}"#, &NoRegistries)
             .demand()
             .is_err()
     );
@@ -724,7 +764,9 @@ fn edge_34_legacy_section_codes_rendering_and_plain_flattening() {
 #[test]
 fn edge_35_unpaired_surrogates_render_as_fffd_plain_keeps_as_is() {
     let json = parse(r#""a\ud800b""#, ParseMode::Data).unwrap();
-    let comp = decode_component_json(&json).demand().unwrap();
+    let comp = decode_component_json(&json, &NoRegistries)
+        .demand()
+        .unwrap();
 
     // Plain UTF-16 flattening keeps the raw unpaired surrogate.
     let flat_u16 = flatten_plain_utf16(&comp, &EmptyLanguage, None);
@@ -739,10 +781,18 @@ fn edge_35_unpaired_surrogates_render_as_fffd_plain_keeps_as_is() {
 #[test]
 fn edge_36_written_book_page_32767_limit_on_decode_and_resolution() {
     let ok_text = "a".repeat(32_765); // `"..."` -> 32,767 chars
-    assert!(decode_book_page(&Dyn::string(ok_text)).demand().is_ok());
+    assert!(
+        decode_book_page(&Dyn::string(ok_text), &NoRegistries)
+            .demand()
+            .is_ok()
+    );
 
     let too_long = "a".repeat(32_766); // `"..."` -> 32,768 chars
-    assert!(decode_book_page(&Dyn::string(too_long)).demand().is_err());
+    assert!(
+        decode_book_page(&Dyn::string(too_long), &NoRegistries)
+            .demand()
+            .is_err()
+    );
 
     // On resolution: one page expanding beyond 32,767 JSON chars cancels resolution of ALL pages,
     // while still marking the book resolved.
@@ -759,4 +809,319 @@ fn edge_36_written_book_page_32767_limit_on_decode_and_resolution() {
     let (result_pages, resolved_flag) = resolve_book_pages(&[p1.clone(), p2.clone()], &mut ctx);
     assert!(resolved_flag);
     assert_eq!(result_pages, vec![p1, p2]);
+}
+
+#[test]
+fn default_language_table_deprecated_rules() {
+    let en_us = br#"{
+        "keep": "Value %d",
+        "del": "Gone",
+        "chain.a": "Moved",
+        "overwrite.old": "New",
+        "overwrite.new": "Old",
+        "drop_target.new": "ShouldBeDeleted",
+        "removed_then_renamed": "RemovedFirst",
+        "removed_then_renamed.target": "AlsoDeleted"
+    }"#;
+    let deprecated = br#"{
+        "removed": ["del", "removed_then_renamed"],
+        "renamed": {
+            "chain.a": "chain.b",
+            "chain.b": "chain.c",
+            "overwrite.old": "overwrite.new",
+            "missing.old": "drop_target.new",
+            "removed_then_renamed": "removed_then_renamed.target"
+        }
+    }"#;
+
+    // Without deprecated.json: all en_us entries kept, %d rewritten to %s.
+    let base = LanguageTable::from_default_json(en_us, None).unwrap();
+    assert_eq!(base.get("keep"), Some("Value %s"));
+    assert_eq!(base.get("del"), Some("Gone"));
+
+    // With deprecated.json: removed deleted first, then renames applied in document order.
+    let tbl = LanguageTable::from_default_json(en_us, Some(deprecated)).unwrap();
+    assert_eq!(tbl.get("keep"), Some("Value %s"));
+    assert_eq!(tbl.get("del"), None);
+    // Rename chain: chain.a -> chain.b -> chain.c.
+    assert_eq!(tbl.get("chain.a"), None);
+    assert_eq!(tbl.get("chain.b"), None);
+    assert_eq!(tbl.get("chain.c"), Some("Moved"));
+    // Rename overwrites existing target.
+    assert_eq!(tbl.get("overwrite.old"), None);
+    assert_eq!(tbl.get("overwrite.new"), Some("New"));
+    // Missing old key deletes the target key too.
+    assert_eq!(tbl.get("drop_target.new"), None);
+    // Key deleted by `removed` is absent when `renamed` runs, so target is also deleted.
+    assert_eq!(tbl.get("removed_then_renamed"), None);
+    assert_eq!(tbl.get("removed_then_renamed.target"), None);
+}
+
+#[test]
+fn json_number_narrowing_exact_decimal() {
+    let cases: &[(&str, Num, &str)] = &[
+        ("-0.0", Num::Byte(0), "0"),
+        ("-0", Num::Byte(0), "0"),
+        ("2.0", Num::Byte(2), "2"),
+        ("1e2", Num::Byte(100), "100"),
+        ("128", Num::Short(128), "128"),
+        ("-129", Num::Short(-129), "-129"),
+        ("32768", Num::Int(32768), "32768"),
+        ("2147483648", Num::Long(2_147_483_648), "2147483648"),
+        (
+            "9007199254740993.0",
+            Num::Long(9_007_199_254_740_993),
+            "9007199254740993",
+        ),
+        (
+            "-9223372036854775808",
+            Num::Long(i64::MIN),
+            "-9223372036854775808",
+        ),
+        ("1e-400", Num::Float(0.0), "0.0"),
+        ("1.0000000000000000001", Num::Float(1.0), "1.0"),
+        ("1.5", Num::Float(1.5), "1.5"),
+        ("0.1", Num::Double(0.1), "0.1"),
+        ("1e20", Num::Double(1e20), "1.0E20"),
+    ];
+
+    for (raw, expected_num, expected_display) in cases {
+        let json = format!(r#"{{"translate":"%s","with":[{raw}]}}"#);
+        let c = from_json(&json);
+        let Content::Translatable(tr) = &c.content else {
+            panic!("expected translatable");
+        };
+        assert_eq!(tr.args.len(), 1);
+        assert_eq!(
+            tr.args[0],
+            TranslationArg::Num(expected_num.clone()),
+            "{raw}"
+        );
+        assert_eq!(
+            flatten_plain(&c, &EmptyLanguage, None),
+            *expected_display,
+            "{raw}"
+        );
+    }
+
+    // -0.0 encodes to NBT as TAG_Byte(0).
+    let neg_zero = from_json(r#"{"translate":"%s","with":[-0.0]}"#);
+    let tag = encode_component_nbt(&neg_zero).demand().unwrap();
+    let with_tag = tag.as_compound().unwrap().get("with").unwrap();
+    assert_eq!(with_tag.as_list().unwrap().as_slice(), &[Tag::Byte(0)]);
+}
+
+#[test]
+fn nbt_path_empty_and_spaces() {
+    // Empty path is valid (zero nodes) and selects the root tag itself.
+    let empty = NbtPath::parse("").unwrap();
+    assert!(empty.nodes().is_empty());
+    let mut root = Compound::new();
+    root.insert("k", Tag::Int(7));
+    let root_tag = Tag::Compound(root);
+    assert_eq!(empty.get(&root_tag), vec![root_tag]);
+
+    let c = from_json(r#"{"nbt":"","entity":"@s"}"#);
+    assert!(matches!(c.content, Content::Nbt(NbtContent { ref path, .. }) if path.is_empty()));
+
+    // Spaces outside quotes terminate parsing and produce a trailing-data error.
+    for bad in [" a", "a b", "a "] {
+        assert!(NbtPath::parse(bad).is_err(), "{bad:?}");
+        let j = format!(r#"{{"nbt":"{bad}","entity":"@s"}}"#);
+        assert!(
+            decode_component_str_json(&j, &NoRegistries)
+                .demand()
+                .is_err(),
+            "{bad:?}"
+        );
+    }
+
+    // Spaces inside quoted keys remain valid.
+    assert!(NbtPath::parse("a.'b c'").is_ok());
+}
+
+#[test]
+fn encoded_key_order_dispatched_and_atlas() {
+    let ce = from_json(
+        r#"{"text":"a","click_event":{"action":"open_url","url":"https://example.com"}}"#,
+    );
+    assert_eq!(
+        to_json_str(&ce),
+        r#"{"text":"a","click_event":{"url":"https://example.com","action":"open_url"}}"#
+    );
+
+    let he = from_json(r#"{"text":"a","hover_event":{"action":"show_text","value":"tip"}}"#);
+    assert_eq!(
+        to_json_str(&he),
+        r#"{"text":"a","hover_event":{"value":"tip","action":"show_text"}}"#
+    );
+
+    let atlas = from_json(r#"{"sprite":"item/apple","atlas":"minecraft:items"}"#);
+    assert_eq!(
+        to_json_str(&atlas),
+        r#"{"atlas":"minecraft:items","sprite":"minecraft:item/apple"}"#
+    );
+}
+
+#[test]
+fn registry_context_checks_present_missing_unavailable() {
+    struct TestRegistries {
+        regs: HashMap<String, HashSet<String>>,
+    }
+    impl RegistryContext for TestRegistries {
+        fn lookup(&self, registry: &Identifier, id: &Identifier) -> RegistryLookup {
+            match self.regs.get(&registry.to_string()) {
+                None => RegistryLookup::Unavailable,
+                Some(entries) => {
+                    if entries.contains(&id.to_string()) {
+                        RegistryLookup::Present
+                    } else {
+                        RegistryLookup::Missing
+                    }
+                }
+            }
+        }
+    }
+
+    let mut regs: HashMap<String, HashSet<String>> = HashMap::new();
+    regs.insert(
+        "minecraft:item".to_owned(),
+        [
+            "minecraft:stone",
+            "minecraft:air",
+            "minecraft:diamond_sword",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
+    );
+    regs.insert(
+        "minecraft:entity_type".to_owned(),
+        ["minecraft:pig"].into_iter().map(str::to_owned).collect(),
+    );
+    regs.insert(
+        "minecraft:dialog".to_owned(),
+        ["minecraft:server_links"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    regs.insert(
+        "minecraft:enchantment".to_owned(),
+        ["minecraft:sharpness"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    let ctx = TestRegistries { regs };
+
+    // show_item: Present passes; Missing, minecraft:air, and Unavailable fail.
+    let stone_hover =
+        r#"{"text":"a","hover_event":{"action":"show_item","id":"minecraft:stone","count":5}}"#;
+    let decoded_stone = decode_component_str_json(stone_hover, &ctx)
+        .demand()
+        .unwrap();
+    assert_eq!(
+        to_json_str(&decoded_stone),
+        r#"{"text":"a","hover_event":{"id":"minecraft:stone","count":5,"action":"show_item"}}"#
+    );
+    assert!(
+        decode_component_str_json(stone_hover, &NoRegistries)
+            .demand()
+            .is_err()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_item","id":"minecraft:not_an_item"}}"#,
+            &ctx
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_item","id":"minecraft:air"}}"#,
+            &ctx
+        )
+        .demand()
+        .is_err()
+    );
+
+    // show_item with enchantments: Present passes; Missing fails.
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_item","id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"minecraft:sharpness":2}}}}"#,
+            &ctx
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_item","id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"minecraft:not_real":2}}}}"#,
+            &ctx
+        )
+        .demand()
+        .is_err()
+    );
+
+    // show_entity: Present passes; Missing and Unavailable fail.
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_entity","id":"minecraft:pig","uuid":[1,2,3,4]}}"#,
+            &ctx
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_entity","id":"minecraft:nope","uuid":[1,2,3,4]}}"#,
+            &ctx
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","hover_event":{"action":"show_entity","id":"minecraft:pig","uuid":[1,2,3,4]}}"#,
+            &NoRegistries
+        )
+        .demand()
+        .is_err()
+    );
+
+    // show_dialog by id: Present passes; Missing and Unavailable fail; inline succeeds even with NoRegistries.
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","click_event":{"action":"show_dialog","dialog":"minecraft:server_links"}}"#,
+            &ctx
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","click_event":{"action":"show_dialog","dialog":"minecraft:not_a_dialog"}}"#,
+            &ctx
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","click_event":{"action":"show_dialog","dialog":"minecraft:server_links"}}"#,
+            &NoRegistries
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_str_json(
+            r#"{"text":"a","click_event":{"action":"show_dialog","dialog":{"type":"minecraft:notice","title":"T"}}}"#,
+            &NoRegistries
+        )
+        .demand()
+        .is_ok()
+    );
 }

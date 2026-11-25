@@ -7,6 +7,7 @@ use zenith_codec::json::{ParseMode, parse_bytes};
 use zenith_registry::Identifier;
 
 use zenith_components::item::*;
+use zenith_components::registry_context::AllowAllRegistries;
 use zenith_components::text::{EmptyLanguage, flatten_plain};
 
 #[test]
@@ -46,7 +47,7 @@ fn cached_26_3_item_defaults_and_registry_ids_load_cleanly() {
     }
 
     // 2. Load EVERY per-item default component file in reports/minecraft/components/item/*.json.
-    let prototypes = load_prototypes_for_version("26.3")
+    let prototypes = load_prototypes_for_version("26.3", &AllowAllRegistries)
         .expect("every 26.3 item default component file must decode cleanly");
     eprintln!("loaded {} cached 26.3 item prototypes", prototypes.len());
     assert!(

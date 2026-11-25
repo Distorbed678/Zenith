@@ -10,7 +10,8 @@ use zenith_registry::Identifier;
 use super::patch::{ComponentMap, ComponentPatch, PatchedComponentMap};
 use super::registry::ComponentTypeId;
 use super::types::{ComponentValue, Rarity};
-use crate::dynval::{Dyn, MapBuilder, Num, Rec, read_identifier, read_int};
+use crate::dynval::{Dyn, MapBuilder, Num, Rec, read_int};
+use crate::registry_context::{RegistryContext, ids as reg_ids, read_registry_id};
 use crate::text::{Component, Style, TextColor};
 
 /// Maximum item stack count (`1..=99`; spec B.6).
@@ -78,8 +79,8 @@ fn is_air(id: &Identifier) -> bool {
     id.namespace() == "minecraft" && id.path() == "air"
 }
 
-fn read_item_id(d: &Dyn) -> DataResult<Identifier> {
-    read_identifier(d).and_then(|id| {
+fn read_item_id(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Identifier> {
+    read_registry_id(d, reg_ids::item(), registries).and_then(|id| {
         if is_air(&id) {
             DataResult::error("Item must not be minecraft:air")
         } else {
@@ -125,19 +126,21 @@ impl ItemTemplate {
     }
 
     /// Decodes a template from either a bare item-id string or a map.
-    pub fn decode(d: &Dyn) -> DataResult<Self> {
+    pub fn decode(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Self> {
         if matches!(d, Dyn::Str(_)) {
-            return read_item_id(d).map(Self::new);
+            return read_item_id(d, registries).map(Self::new);
         }
-        Self::decode_record(d)
+        Self::decode_record(d, registries)
     }
 
     /// Decodes a template from a map (`id`, optional `count` 1..=99, optional `components`).
-    pub fn decode_record(d: &Dyn) -> DataResult<Self> {
+    pub fn decode_record(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Self> {
         let mut r = Rec::new(d);
-        let id = r.required("id", read_item_id);
+        let id = r.required("id", |v| read_item_id(v, registries));
         let count = r.optional("count", 1, read_count);
-        let components = r.optional("components", ComponentPatch::new(), ComponentPatch::decode);
+        let components = r.optional("components", ComponentPatch::new(), |v| {
+            ComponentPatch::decode(v, registries)
+        });
         r.finish(|| {
             Some(Self {
                 id: id?,
@@ -148,13 +151,13 @@ impl ItemTemplate {
     }
 
     /// Decodes a template from [`Json`].
-    pub fn decode_json(json: &Json) -> DataResult<Self> {
-        Self::decode(&Dyn::from_json(json))
+    pub fn decode_json(json: &Json, registries: &dyn RegistryContext) -> DataResult<Self> {
+        Self::decode(&Dyn::from_json(json), registries)
     }
 
     /// Decodes a template from an NBT [`Tag`].
-    pub fn decode_nbt(tag: &Tag) -> DataResult<Self> {
-        Self::decode(&Dyn::from_tag(tag))
+    pub fn decode_nbt(tag: &Tag, registries: &dyn RegistryContext) -> DataResult<Self> {
+        Self::decode(&Dyn::from_tag(tag), registries)
     }
 
     /// Encodes as an object (`count` omitted when 1, `components` omitted when empty).
@@ -378,11 +381,17 @@ impl ItemStack {
     /// Decodes a non-empty `ItemStack` from [`Dyn`] (spec B.6).
     ///
     /// Does **not** run stack validation (edge case 42); does **not** accept bare id strings.
-    pub fn decode(d: &Dyn, prototypes: &PrototypeRegistry) -> DataResult<Self> {
+    pub fn decode(
+        d: &Dyn,
+        prototypes: &PrototypeRegistry,
+        registries: &dyn RegistryContext,
+    ) -> DataResult<Self> {
         let mut r = Rec::new(d);
-        let id = r.required("id", read_item_id);
+        let id = r.required("id", |v| read_item_id(v, registries));
         let count = r.optional("count", 1, read_count);
-        let components = r.optional("components", ComponentPatch::new(), ComponentPatch::decode);
+        let components = r.optional("components", ComponentPatch::new(), |v| {
+            ComponentPatch::decode(v, registries)
+        });
         let Some(id_val) = id else {
             return r.finish(|| None);
         };
@@ -402,23 +411,35 @@ impl ItemStack {
     }
 
     /// Decodes an optional `ItemStack`: `{}` decodes as [`ItemStack::empty`].
-    pub fn decode_optional(d: &Dyn, prototypes: &PrototypeRegistry) -> DataResult<Self> {
+    pub fn decode_optional(
+        d: &Dyn,
+        prototypes: &PrototypeRegistry,
+        registries: &dyn RegistryContext,
+    ) -> DataResult<Self> {
         if let Dyn::Map(m) = d
             && m.is_empty()
         {
             return DataResult::Success(Self::empty());
         }
-        Self::decode(d, prototypes)
+        Self::decode(d, prototypes, registries)
     }
 
     /// Decodes from [`Json`].
-    pub fn decode_json(json: &Json, prototypes: &PrototypeRegistry) -> DataResult<Self> {
-        Self::decode(&Dyn::from_json(json), prototypes)
+    pub fn decode_json(
+        json: &Json,
+        prototypes: &PrototypeRegistry,
+        registries: &dyn RegistryContext,
+    ) -> DataResult<Self> {
+        Self::decode(&Dyn::from_json(json), prototypes, registries)
     }
 
     /// Decodes from an NBT [`Tag`].
-    pub fn decode_nbt(tag: &Tag, prototypes: &PrototypeRegistry) -> DataResult<Self> {
-        Self::decode(&Dyn::from_tag(tag), prototypes)
+    pub fn decode_nbt(
+        tag: &Tag,
+        prototypes: &PrototypeRegistry,
+        registries: &dyn RegistryContext,
+    ) -> DataResult<Self> {
+        Self::decode(&Dyn::from_tag(tag), prototypes, registries)
     }
 
     /// Encodes a non-empty `ItemStack` to [`Dyn`] (spec B.6, edge case 41):

@@ -1,11 +1,16 @@
 //! Spec edge cases 37–47 (Part B: Item data components) from `docs/specs/codec/text-and-data-components.md`.
 
+use std::collections::{HashMap, HashSet};
+
 use zenith_codec::json::{ParseMode, parse};
 use zenith_nbt::parse_snbt;
 use zenith_registry::Identifier;
 
 use zenith_components::dynval::Dyn;
 use zenith_components::item::*;
+use zenith_components::registry_context::{
+    AllowAllRegistries, NoRegistries, RegistryContext, RegistryLookup,
+};
 use zenith_components::text::Component;
 
 fn id(s: &str) -> Identifier {
@@ -59,6 +64,7 @@ fn edge_37_patch_sanitization_drops_default_equals_and_noop_removals() {
             r#"{"id":"minecraft:stone","count":1,"components":{"minecraft:max_stack_size":64,"!minecraft:food":{}}}"#,
         ),
         &protos,
+        &AllowAllRegistries,
     )
     .demand()
     .unwrap();
@@ -70,63 +76,80 @@ fn edge_37_patch_sanitization_drops_default_equals_and_noop_removals() {
 #[test]
 fn edge_38_removal_and_unit_components_require_a_map() {
     assert!(
-        ComponentPatch::decode(&dyn_json(r#"{"!minecraft:damage":0}"#))
+        ComponentPatch::decode(&dyn_json(r#"{"!minecraft:damage":0}"#), &AllowAllRegistries)
             .demand()
             .is_err()
     );
-    let ok_rem = ComponentPatch::decode(&dyn_json(r#"{"!minecraft:damage":{"x":1}}"#))
-        .demand()
-        .unwrap();
+    let ok_rem = ComponentPatch::decode(
+        &dyn_json(r#"{"!minecraft:damage":{"x":1}}"#),
+        &AllowAllRegistries,
+    )
+    .demand()
+    .unwrap();
     assert_eq!(
         ok_rem.get(ComponentTypeId::Damage),
         Some(&PatchEntry::Removed)
     );
 
-    let ok_unit = ComponentPatch::decode(&dyn_json(r#"{"minecraft:unbreakable":{}}"#))
-        .demand()
-        .unwrap();
+    let ok_unit = ComponentPatch::decode(
+        &dyn_json(r#"{"minecraft:unbreakable":{}}"#),
+        &AllowAllRegistries,
+    )
+    .demand()
+    .unwrap();
     assert_eq!(
         ok_unit.get(ComponentTypeId::Unbreakable),
         Some(&PatchEntry::Set(Box::new(ComponentValue::Unit(UnitValue))))
     );
     assert!(
-        ComponentPatch::decode(&dyn_json(r#"{"minecraft:unbreakable":true}"#))
-            .demand()
-            .is_err()
+        ComponentPatch::decode(
+            &dyn_json(r#"{"minecraft:unbreakable":true}"#),
+            &AllowAllRegistries
+        )
+        .demand()
+        .is_err()
     );
 }
 
 #[test]
 fn edge_39_transient_invalid_and_unknown_patch_keys_fail() {
     assert!(
-        ComponentPatch::decode(&dyn_json(r#"{"minecraft:creative_slot_lock":{}}"#))
+        ComponentPatch::decode(
+            &dyn_json(r#"{"minecraft:creative_slot_lock":{}}"#),
+            &AllowAllRegistries
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        ComponentPatch::decode(&dyn_json(r#"{"Minecraft:damage":1}"#), &AllowAllRegistries)
             .demand()
             .is_err()
     );
     assert!(
-        ComponentPatch::decode(&dyn_json(r#"{"Minecraft:damage":1}"#))
-            .demand()
-            .is_err()
-    );
-    assert!(
-        ComponentPatch::decode(&dyn_json(r#"{"minecraft:does_not_exist":1}"#))
-            .demand()
-            .is_err()
+        ComponentPatch::decode(
+            &dyn_json(r#"{"minecraft:does_not_exist":1}"#),
+            &AllowAllRegistries
+        )
+        .demand()
+        .is_err()
     );
 }
 
 #[test]
 fn edge_40_patch_with_both_set_and_remove_last_processed_wins() {
-    let p1 = ComponentPatch::decode(&dyn_json(
-        r#"{"minecraft:damage":5,"!minecraft:damage":{}}"#,
-    ))
+    let p1 = ComponentPatch::decode(
+        &dyn_json(r#"{"minecraft:damage":5,"!minecraft:damage":{}}"#),
+        &AllowAllRegistries,
+    )
     .demand()
     .unwrap();
     assert_eq!(p1.get(ComponentTypeId::Damage), Some(&PatchEntry::Removed));
 
-    let p2 = ComponentPatch::decode(&dyn_json(
-        r#"{"!minecraft:damage":{},"minecraft:damage":5}"#,
-    ))
+    let p2 = ComponentPatch::decode(
+        &dyn_json(r#"{"!minecraft:damage":{},"minecraft:damage":5}"#),
+        &AllowAllRegistries,
+    )
     .demand()
     .unwrap();
     assert_eq!(
@@ -145,7 +168,7 @@ fn edge_41_stack_always_writes_count_template_omits_1_and_accepts_bare_id() {
         "1"
     );
 
-    let tpl = ItemTemplate::decode(&dyn_json(r#""minecraft:stone""#))
+    let tpl = ItemTemplate::decode(&dyn_json(r#""minecraft:stone""#), &AllowAllRegistries)
         .demand()
         .unwrap();
     assert_eq!(tpl.id, id("minecraft:stone"));
@@ -160,11 +183,15 @@ fn edge_41_stack_always_writes_count_template_omits_1_and_accepts_bare_id() {
         r#"{"id":"minecraft:air","count":1}"#,
     ] {
         assert!(
-            ItemTemplate::decode(&dyn_json(bad)).demand().is_err(),
+            ItemTemplate::decode(&dyn_json(bad), &AllowAllRegistries)
+                .demand()
+                .is_err(),
             "{bad}"
         );
         assert!(
-            ItemStack::decode(&dyn_json(bad), &protos).demand().is_err(),
+            ItemStack::decode(&dyn_json(bad), &protos, &AllowAllRegistries)
+                .demand()
+                .is_err(),
             "{bad}"
         );
     }
@@ -176,6 +203,7 @@ fn edge_42_damageable_and_stackable_decodes_from_nbt_but_fails_validation() {
     let stack = ItemStack::decode(
         &dyn_snbt(r#"{id:"minecraft:diamond_sword",components:{"minecraft:max_stack_size":64}}"#),
         &protos,
+        &AllowAllRegistries,
     )
     .demand()
     .unwrap();
@@ -183,9 +211,10 @@ fn edge_42_damageable_and_stackable_decodes_from_nbt_but_fails_validation() {
     assert!(stack.validate(&protos).is_err());
 
     // Template -> stack runs validation and yields empty stack + warning.
-    let tpl = ItemTemplate::decode(&dyn_snbt(
-        r#"{id:"minecraft:diamond_sword",components:{"minecraft:max_stack_size":64}}"#,
-    ))
+    let tpl = ItemTemplate::decode(
+        &dyn_snbt(r#"{id:"minecraft:diamond_sword",components:{"minecraft:max_stack_size":64}}"#),
+        &AllowAllRegistries,
+    )
     .demand()
     .unwrap();
     let (empty_stack, warn) = tpl.to_stack_or_empty(&protos);
@@ -208,7 +237,8 @@ fn edge_42_damageable_and_stackable_decodes_from_nbt_but_fails_validation() {
     items.insert(1, id("minecraft:diamond_sword"));
     let mut wire = Vec::new();
     encode_creative_slot_stack(&stack, &items, &mut wire).unwrap();
-    let (decoded, used) = decode_creative_slot_stack(&wire, &items, &protos).unwrap();
+    let (decoded, used) =
+        decode_creative_slot_stack(&wire, &items, &protos, &AllowAllRegistries).unwrap();
     assert_eq!(used, wire.len());
     assert_eq!(decoded, stack);
 }
@@ -224,6 +254,7 @@ fn edge_43_container_slots_gaps_duplicates_and_slot_256_fails() {
                 {"slot":0,"item":{"id":"minecraft:stone","count":3}}
             ]"#,
         ),
+        &AllowAllRegistries,
     )
     .demand()
     .unwrap();
@@ -244,7 +275,8 @@ fn edge_43_container_slots_gaps_duplicates_and_slot_256_fails() {
     assert!(
         decode_component_value(
             ComponentTypeId::Container,
-            &dyn_json(r#"[{"slot":256,"item":"minecraft:stone"}]"#)
+            &dyn_json(r#"[{"slot":256,"item":"minecraft:stone"}]"#),
+            &AllowAllRegistries,
         )
         .demand()
         .is_err()
@@ -256,6 +288,7 @@ fn edge_44_potion_contents_short_string_reencodes_as_object() {
     let val = decode_component_value(
         ComponentTypeId::PotionContents,
         &dyn_json(r#""minecraft:swiftness""#),
+        &AllowAllRegistries,
     )
     .demand()
     .unwrap();
@@ -269,9 +302,13 @@ fn edge_44_potion_contents_short_string_reencodes_as_object() {
 
 #[test]
 fn edge_45_profile_short_string_and_invalid_names() {
-    let val = decode_component_value(ComponentTypeId::Profile, &dyn_json(r#""Steve""#))
-        .demand()
-        .unwrap();
+    let val = decode_component_value(
+        ComponentTypeId::Profile,
+        &dyn_json(r#""Steve""#),
+        &AllowAllRegistries,
+    )
+    .demand()
+    .unwrap();
     let ComponentValue::Profile(p) = val else {
         panic!("expected profile");
     };
@@ -279,14 +316,19 @@ fn edge_45_profile_short_string_and_invalid_names() {
     assert!(p.is_partial());
 
     assert!(
-        decode_component_value(ComponentTypeId::Profile, &dyn_json(r#""Bad Name""#))
-            .demand()
-            .is_err()
+        decode_component_value(
+            ComponentTypeId::Profile,
+            &dyn_json(r#""Bad Name""#),
+            &AllowAllRegistries
+        )
+        .demand()
+        .is_err()
     );
     assert!(
         decode_component_value(
             ComponentTypeId::Profile,
-            &dyn_json(r#""12345678901234567""#)
+            &dyn_json(r#""12345678901234567""#),
+            &AllowAllRegistries,
         )
         .demand()
         .is_err()
@@ -298,7 +340,8 @@ fn edge_46_sign_text_requires_4_messages_and_always_writes_color_and_glow() {
     assert!(
         decode_component_value(
             ComponentTypeId::SignTextFront,
-            &dyn_json(r#"{"messages":["a","b","c"]}"#)
+            &dyn_json(r#"{"messages":["a","b","c"]}"#),
+            &AllowAllRegistries,
         )
         .demand()
         .is_err()
@@ -307,6 +350,7 @@ fn edge_46_sign_text_requires_4_messages_and_always_writes_color_and_glow() {
     let val = decode_component_value(
         ComponentTypeId::SignTextFront,
         &dyn_json(r#"{"messages":["a","b","c","d"]}"#),
+        &AllowAllRegistries,
     )
     .demand()
     .unwrap();
@@ -325,7 +369,7 @@ fn edge_47_network_patch_sets_before_removals_empty_and_non_positive_count() {
     let mut empty_buf = Vec::new();
     encode_patch_network(&ComponentPatch::new(), &mut empty_buf).unwrap();
     assert_eq!(empty_buf, vec![0x00, 0x00]);
-    let (decoded_empty, used) = decode_patch_network(&empty_buf).unwrap();
+    let (decoded_empty, used) = decode_patch_network(&empty_buf, &AllowAllRegistries).unwrap();
     assert_eq!(used, 2);
     assert!(decoded_empty.is_empty());
 
@@ -337,7 +381,7 @@ fn edge_47_network_patch_sets_before_removals_empty_and_non_positive_count() {
     encode_patch_network(&patch, &mut buf).unwrap();
     // Expected: set_count=1, rem_count=1, set(id=1, val=16), rem(id=3)
     assert_eq!(buf, vec![1, 1, 1, 16, 3]);
-    let (decoded_patch, used) = decode_patch_network(&buf).unwrap();
+    let (decoded_patch, used) = decode_patch_network(&buf, &AllowAllRegistries).unwrap();
     assert_eq!(used, buf.len());
     assert_eq!(decoded_patch, patch);
 
@@ -348,9 +392,156 @@ fn edge_47_network_patch_sets_before_removals_empty_and_non_positive_count() {
     for count in [0, -1, -50] {
         let mut sbuf = Vec::new();
         write_varint(&mut sbuf, count);
-        let (stack, used) = decode_optional_stack_network(&sbuf, &items, &protos).unwrap();
+        let (stack, used) =
+            decode_optional_stack_network(&sbuf, &items, &protos, &AllowAllRegistries).unwrap();
         assert_eq!(used, sbuf.len());
         assert!(stack.is_empty());
-        assert!(decode_stack_network(&sbuf, &items, &protos).is_err());
+        assert!(decode_stack_network(&sbuf, &items, &protos, &AllowAllRegistries).is_err());
     }
+}
+
+#[test]
+fn item_components_registry_context_validation() {
+    struct SmallCtx(HashMap<String, HashSet<String>>);
+    impl RegistryContext for SmallCtx {
+        fn lookup(&self, registry: &Identifier, id: &Identifier) -> RegistryLookup {
+            match self.regs().get(&registry.to_string()) {
+                None => RegistryLookup::Unavailable,
+                Some(set) => {
+                    if set.contains(&id.to_string()) {
+                        RegistryLookup::Present
+                    } else {
+                        RegistryLookup::Missing
+                    }
+                }
+            }
+        }
+    }
+    impl SmallCtx {
+        fn regs(&self) -> &HashMap<String, HashSet<String>> {
+            &self.0
+        }
+    }
+
+    let mut regs: HashMap<String, HashSet<String>> = HashMap::new();
+    regs.insert(
+        "minecraft:enchantment".to_owned(),
+        ["minecraft:sharpness"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    regs.insert(
+        "minecraft:item".to_owned(),
+        ["minecraft:oak_planks", "minecraft:stone"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    regs.insert(
+        "minecraft:sound_event".to_owned(),
+        ["minecraft:entity.item.break"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    let ctx = SmallCtx(regs);
+
+    // Registry-keyed map (enchantments): Present passes, Missing fails, Unavailable fails.
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Enchantments,
+            &dyn_json(r#"{"minecraft:sharpness":3}"#),
+            &ctx,
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Enchantments,
+            &dyn_json(r#"{"minecraft:not_real":3}"#),
+            &ctx,
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Enchantments,
+            &dyn_json(r#"{"minecraft:sharpness":3}"#),
+            &NoRegistries,
+        )
+        .demand()
+        .is_err()
+    );
+
+    // Holder set (repairable): direct ids checked, #tag currently unchecked hook.
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Repairable,
+            &dyn_json(r#"{"items":["minecraft:oak_planks"]}"#),
+            &ctx,
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Repairable,
+            &dyn_json(r#"{"items":["minecraft:nope"]}"#),
+            &ctx,
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::Repairable,
+            &dyn_json(r##"{"items":"#minecraft:planks"}"##),
+            &NoRegistries,
+        )
+        .demand()
+        .is_ok()
+    );
+
+    // Holder id/inline (break_sound): id checked; inline decodes even with NoRegistries.
+    assert!(
+        decode_component_value(
+            ComponentTypeId::BreakSound,
+            &dyn_json(r#""minecraft:entity.item.break""#),
+            &ctx,
+        )
+        .demand()
+        .is_ok()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::BreakSound,
+            &dyn_json(r#""minecraft:no_sound""#),
+            &ctx,
+        )
+        .demand()
+        .is_err()
+    );
+    assert!(
+        decode_component_value(
+            ComponentTypeId::BreakSound,
+            &dyn_json(r#"{"sound_id":"custom:sound"}"#),
+            &NoRegistries,
+        )
+        .demand()
+        .is_ok()
+    );
+
+    // Unavailable registry fails (damage_type not in SmallCtx).
+    assert!(
+        decode_component_value(
+            ComponentTypeId::DamageType,
+            &dyn_json(r#""minecraft:spear""#),
+            &ctx,
+        )
+        .demand()
+        .is_err()
+    );
 }

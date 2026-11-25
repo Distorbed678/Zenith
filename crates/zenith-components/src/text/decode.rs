@@ -17,6 +17,7 @@ use crate::dynval::{
 use crate::grammar::{validate_block_position, validate_entity_selector};
 use crate::nbt_path::NbtPath;
 use crate::profile::decode_profile;
+use crate::registry_context::RegistryContext;
 
 /// Maximum length in UTF-16 code units for a login disconnect JSON string (spec A.6.3).
 pub const LOGIN_DISCONNECT_MAX_CHARS: usize = 262_144;
@@ -45,11 +46,11 @@ pub const NBT_SOURCE_ORDER: [&str; 3] = ["entity", "block", "storage"];
 pub const OBJECT_KIND_ORDER: [&str; 2] = ["atlas", "player"];
 
 /// Decodes a text component from a format-neutral [`Dyn`] tree (JSON or NBT).
-pub fn decode_component(d: &Dyn) -> DataResult<Component> {
+pub fn decode_component(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Component> {
     match d {
         Dyn::Str(s) => DataResult::Success(Component::new(Content::Literal(s.clone()))),
-        Dyn::List(items) => decode_component_list(items),
-        Dyn::Map(_) => decode_component_map(d),
+        Dyn::List(items) => decode_component_list(items, registries),
+        Dyn::Map(_) => decode_component_map(d, registries),
         other => DataResult::error(format!(
             "Not a valid text component: {} is not a string, list or map",
             other.kind()
@@ -58,38 +59,47 @@ pub fn decode_component(d: &Dyn) -> DataResult<Component> {
 }
 
 /// Decodes a text component from a [`Json`] value.
-pub fn decode_component_json(json: &Json) -> DataResult<Component> {
-    decode_component(&Dyn::from_json(json))
+pub fn decode_component_json(
+    json: &Json,
+    registries: &dyn RegistryContext,
+) -> DataResult<Component> {
+    decode_component(&Dyn::from_json(json), registries)
 }
 
 /// Decodes a text component from strict JSON text.
-pub fn decode_component_str_json(text: &str) -> DataResult<Component> {
+pub fn decode_component_str_json(
+    text: &str,
+    registries: &dyn RegistryContext,
+) -> DataResult<Component> {
     match parse(text, ParseMode::Data) {
-        Ok(json) => decode_component_json(&json),
+        Ok(json) => decode_component_json(&json, registries),
         Err(e) => DataResult::error(format!("Invalid JSON: {e}")),
     }
 }
 
 /// Decodes a login disconnect reason JSON string, enforcing the 262,144-character limit (spec A.6.3).
-pub fn decode_login_disconnect_json(text: &str) -> DataResult<Component> {
+pub fn decode_login_disconnect_json(
+    text: &str,
+    registries: &dyn RegistryContext,
+) -> DataResult<Component> {
     if text.encode_utf16().count() > LOGIN_DISCONNECT_MAX_CHARS {
         return DataResult::error(format!(
             "Disconnect reason exceeds {LOGIN_DISCONNECT_MAX_CHARS} characters"
         ));
     }
-    decode_component_str_json(text)
+    decode_component_str_json(text, registries)
 }
 
 /// Decodes a text component from an NBT [`Tag`].
-pub fn decode_component_nbt(tag: &Tag) -> DataResult<Component> {
-    decode_component(&Dyn::from_tag(tag))
+pub fn decode_component_nbt(tag: &Tag, registries: &dyn RegistryContext) -> DataResult<Component> {
+    decode_component(&Dyn::from_tag(tag), registries)
 }
 
 /// Decodes a written book page from [`Dyn`], rejecting pages whose compact JSON encoding exceeds
 /// [`BOOK_PAGE_MAX_JSON_CHARS`] (32,767 UTF-16 code units; spec A.6.3, edge case 36).
-pub fn decode_book_page(d: &Dyn) -> DataResult<Component> {
-    decode_component(d).and_then(
-        |comp| match super::encode::encode_component_json_string(&comp) {
+pub fn decode_book_page(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Component> {
+    decode_component(d, registries).and_then(|comp| {
+        match super::encode::encode_component_json_string(&comp) {
             DataResult::Success(json) => {
                 if json.encode_utf16().count() > BOOK_PAGE_MAX_JSON_CHARS {
                     DataResult::error(format!(
@@ -101,27 +111,32 @@ pub fn decode_book_page(d: &Dyn) -> DataResult<Component> {
             }
             DataResult::Error { message, .. } => DataResult::error(message),
             DataResult::Failure(m) => DataResult::Failure(m),
-        },
-    )
+        }
+    })
 }
 
 /// Decodes a text component from network NBT bytes (nameless root tag, default quota 2,097,152 bytes, depth 512).
-pub fn decode_component_network_nbt(bytes: &[u8]) -> Result<Component, String> {
+pub fn decode_component_network_nbt(
+    bytes: &[u8],
+    registries: &dyn RegistryContext,
+) -> Result<Component, String> {
     let mut acc = Accounter::default_quota();
     let tag = zenith_nbt::from_bytes_network(bytes, &mut acc)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Empty network NBT (TAG_End) is not a valid text component".to_owned())?;
-    decode_component_nbt(&tag).demand().map_err(|e| e.message)
+    decode_component_nbt(&tag, registries)
+        .demand()
+        .map_err(|e| e.message)
 }
 
-fn decode_component_list(items: &[Dyn]) -> DataResult<Component> {
+fn decode_component_list(items: &[Dyn], registries: &dyn RegistryContext) -> DataResult<Component> {
     if items.is_empty() {
         return DataResult::error("Empty list is not a valid text component");
     }
     let mut good = Vec::with_capacity(items.len());
     let mut errors = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        match decode_component(item) {
+        match decode_component(item, registries) {
             DataResult::Success(c) => good.push(c),
             DataResult::Error { message, partial } => {
                 errors.push(format!("Element {i}: {message}"));
@@ -155,11 +170,11 @@ fn merge_component_list(mut comps: Vec<Component>) -> Option<Component> {
     Some(first)
 }
 
-fn decode_component_map(d: &Dyn) -> DataResult<Component> {
+fn decode_component_map(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Component> {
     let mut r = Rec::new(d);
 
     // 1. Content (explicit `type` or fixed fallback order).
-    let content = match decode_content(d) {
+    let content = match decode_content(d, registries) {
         DataResult::Success(c) => Some(c),
         DataResult::Error { message, partial } => {
             r.push_error(message);
@@ -169,10 +184,10 @@ fn decode_component_map(d: &Dyn) -> DataResult<Component> {
     };
 
     // 2. Siblings (`extra`): optional, but if present must be a non-empty list.
-    let siblings = r.optional("extra", Vec::new(), decode_extra_list);
+    let siblings = r.optional("extra", Vec::new(), |v| decode_extra_list(v, registries));
 
     // 3. Style fields (all 11 fields, canonicalized when all unset).
-    let style = decode_style_fields(&mut r);
+    let style = decode_style_fields(&mut r, registries);
 
     r.finish(|| {
         Some(Component {
@@ -183,7 +198,7 @@ fn decode_component_map(d: &Dyn) -> DataResult<Component> {
     })
 }
 
-fn decode_extra_list(d: &Dyn) -> DataResult<Vec<Component>> {
+fn decode_extra_list(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Vec<Component>> {
     let items = match read_list(d) {
         DataResult::Success(i) => i,
         other => return other.map(|_| Vec::new()),
@@ -194,7 +209,7 @@ fn decode_extra_list(d: &Dyn) -> DataResult<Vec<Component>> {
     let mut good = Vec::with_capacity(items.len());
     let mut errors = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        match decode_component(item) {
+        match decode_component(item, registries) {
             DataResult::Success(c) => good.push(c),
             DataResult::Error { message, partial } => {
                 errors.push(format!("Element {i}: {message}"));
@@ -212,7 +227,7 @@ fn decode_extra_list(d: &Dyn) -> DataResult<Vec<Component>> {
     }
 }
 
-fn decode_style_fields(r: &mut Rec<'_>) -> Style {
+fn decode_style_fields(r: &mut Rec<'_>, registries: &dyn RegistryContext) -> Style {
     let color = r.optional_opt("color", |v| {
         read_string(v).and_then(|s| match TextColor::parse(&s) {
             Ok(c) => DataResult::Success(c),
@@ -225,8 +240,8 @@ fn decode_style_fields(r: &mut Rec<'_>) -> Style {
     let underlined = r.optional_opt("underlined", read_bool);
     let strikethrough = r.optional_opt("strikethrough", read_bool);
     let obfuscated = r.optional_opt("obfuscated", read_bool);
-    let click_event = r.optional_opt("click_event", decode_click_event);
-    let hover_event = r.optional_opt("hover_event", decode_hover_event);
+    let click_event = r.optional_opt("click_event", |v| decode_click_event(v, registries));
+    let hover_event = r.optional_opt("hover_event", |v| decode_hover_event(v, registries));
     let insertion = r.optional_opt("insertion", read_string);
     let font = r.optional_opt("font", read_identifier);
 
@@ -276,17 +291,17 @@ fn decode_shadow_color(d: &Dyn) -> DataResult<i32> {
     ))
 }
 
-fn decode_content(d: &Dyn) -> DataResult<Content> {
+fn decode_content(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Content> {
     if let Some(ty) = d.get("type") {
         let kind = match read_string(ty) {
             DataResult::Success(s) => s,
             other => return other.map(|_| unreachable!()),
         };
-        return decode_content_kind(&kind, d);
+        return decode_content_kind(&kind, d, registries);
     }
     let mut errors = Vec::new();
     for kind in CONTENT_KIND_ORDER {
-        match decode_content_kind(kind, d) {
+        match decode_content_kind(kind, d, registries) {
             DataResult::Success(c) => return DataResult::Success(c),
             DataResult::Failure(m) => return DataResult::Failure(m),
             DataResult::Error { message, .. } => errors.push(format!("{kind}: {message}")),
@@ -298,15 +313,19 @@ fn decode_content(d: &Dyn) -> DataResult<Content> {
     ))
 }
 
-fn decode_content_kind(kind: &str, d: &Dyn) -> DataResult<Content> {
+fn decode_content_kind(
+    kind: &str,
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<Content> {
     match kind {
         "text" => decode_text(d),
-        "translatable" => decode_translatable(d),
+        "translatable" => decode_translatable(d, registries),
         "keybind" => decode_keybind(d),
         "score" => decode_score(d),
-        "selector" => decode_selector(d),
-        "nbt" => decode_nbt(d),
-        "object" => decode_object(d),
+        "selector" => decode_selector(d, registries),
+        "nbt" => decode_nbt(d, registries),
+        "object" => decode_object(d, registries),
         other => DataResult::error(format!("Unknown text component type: {other}")),
     }
 }
@@ -317,11 +336,11 @@ fn decode_text(d: &Dyn) -> DataResult<Content> {
     r.finish(|| Some(Content::Literal(text?)))
 }
 
-fn decode_translatable(d: &Dyn) -> DataResult<Content> {
+fn decode_translatable(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Content> {
     let mut r = Rec::new(d);
     let key = r.required("translate", read_string);
     let fallback = r.lenient("fallback", None, |v| read_string(v).map(Some));
-    let args = r.optional("with", Vec::new(), decode_with_args);
+    let args = r.optional("with", Vec::new(), |v| decode_with_args(v, registries));
     r.finish(|| {
         Some(Content::Translatable(Translatable {
             key: key?,
@@ -331,7 +350,7 @@ fn decode_translatable(d: &Dyn) -> DataResult<Content> {
     })
 }
 
-fn decode_with_args(d: &Dyn) -> DataResult<Vec<TranslationArg>> {
+fn decode_with_args(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Vec<TranslationArg>> {
     let items = match read_list(d) {
         DataResult::Success(i) => i,
         other => return other.map(|_| Vec::new()),
@@ -339,7 +358,7 @@ fn decode_with_args(d: &Dyn) -> DataResult<Vec<TranslationArg>> {
     let mut good = Vec::with_capacity(items.len());
     let mut errors = Vec::new();
     for (i, item) in items.iter().enumerate() {
-        match decode_translation_arg(item) {
+        match decode_translation_arg(item, registries) {
             DataResult::Success(a) => good.push(a),
             DataResult::Error { message, partial } => {
                 errors.push(format!("Element {i}: {message}"));
@@ -357,13 +376,13 @@ fn decode_with_args(d: &Dyn) -> DataResult<Vec<TranslationArg>> {
     }
 }
 
-fn decode_translation_arg(d: &Dyn) -> DataResult<TranslationArg> {
+fn decode_translation_arg(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<TranslationArg> {
     match d {
         Dyn::Bool(b) => DataResult::Success(TranslationArg::Bool(*b)),
         Dyn::Num(n) => DataResult::Success(TranslationArg::Num(n.narrowed())),
         Dyn::Str(s) => DataResult::Success(TranslationArg::Str(s.clone())),
         Dyn::Null => DataResult::error("Null is not a valid translation argument"),
-        _ => decode_component(d).map(|c| match c.as_plain_literal() {
+        _ => decode_component(d, registries).map(|c| match c.as_plain_literal() {
             Some(s) => TranslationArg::Str(s.clone()),
             None => TranslationArg::Component(c),
         }),
@@ -398,7 +417,7 @@ fn decode_score(d: &Dyn) -> DataResult<Content> {
     r.finish(|| Some(Content::Score(score?)))
 }
 
-fn decode_selector(d: &Dyn) -> DataResult<Content> {
+fn decode_selector(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Content> {
     let mut r = Rec::new(d);
     let pattern = r.required("selector", |v| {
         read_string(v).and_then(|s| match validate_entity_selector(&s) {
@@ -406,7 +425,7 @@ fn decode_selector(d: &Dyn) -> DataResult<Content> {
             Err(m) => DataResult::error(format!("Invalid selector: {m}")),
         })
     });
-    let separator = r.optional_opt("separator", decode_component);
+    let separator = r.optional_opt("separator", |v| decode_component(v, registries));
     r.finish(|| {
         Some(Content::Selector(SelectorContent {
             pattern: pattern?,
@@ -415,7 +434,7 @@ fn decode_selector(d: &Dyn) -> DataResult<Content> {
     })
 }
 
-fn decode_nbt(d: &Dyn) -> DataResult<Content> {
+fn decode_nbt(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Content> {
     let mut r = Rec::new(d);
     let path = r.required("nbt", |v| {
         read_string(v).and_then(|s| match NbtPath::parse(&s) {
@@ -426,7 +445,7 @@ fn decode_nbt(d: &Dyn) -> DataResult<Content> {
     let interpret = r.lenient("interpret", false, read_bool);
     let plain = r.lenient("plain", false, read_bool);
     let separator = r.lenient("separator", None, |v| {
-        decode_component(v).map(|c| Some(Box::new(c)))
+        decode_component(v, registries).map(|c| Some(Box::new(c)))
     });
     if interpret && plain {
         r.push_error("Cannot have both interpret and plain set to true");
@@ -503,7 +522,7 @@ fn decode_nbt_source_kind(kind: &str, d: &Dyn) -> DataResult<NbtSource> {
     }
 }
 
-fn decode_object(d: &Dyn) -> DataResult<Content> {
+fn decode_object(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Content> {
     let mut r = Rec::new(d);
     let info = match decode_object_info(d) {
         DataResult::Success(info) => Some(info),
@@ -513,7 +532,7 @@ fn decode_object(d: &Dyn) -> DataResult<Content> {
         }
         DataResult::Failure(m) => return DataResult::Failure(m),
     };
-    let fallback = r.optional_opt("fallback", decode_component);
+    let fallback = r.optional_opt("fallback", |v| decode_component(v, registries));
     r.finish(|| {
         Some(Content::Object(ObjectContent {
             info: info?,

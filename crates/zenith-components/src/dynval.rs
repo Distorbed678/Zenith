@@ -86,42 +86,29 @@ impl Num {
         }
     }
 
-    /// Boolean reading. NBT: true iff non-zero as a double. JSON: the library's number→boolean rule.
+    /// Boolean reading (spec A.6.1 rules 8–9): NBT numbers are true iff non-zero as a double;
+    /// JSON numbers are rejected (only JSON `true`/`false` are booleans).
     pub fn to_bool(&self) -> Result<bool, String> {
         match self {
-            // PARITY [oracle]: settled by the text-component suite (believed: low 8 bits non-zero).
-            Self::Json(n) => n.to_i8().map(|v| v != 0).map_err(|e| e.to_string()),
+            Self::Json(n) => Err(format!("Not a boolean: {}", n.text())),
             other => Ok(other.to_f64() != 0.0),
         }
     }
 
     /// The narrowed type JSON numbers take when they reach an in-memory number (translation arguments, conversion
-    /// to NBT): the smallest integral type that holds an integral value, else a float if exact, else a double.
-    // PARITY [oracle]: settled by the text-component suite (A.7.3 JSON narrowing).
+    /// to NBT; spec A.7.3): using the number's exact decimal value, an integer within `i64` becomes the smallest
+    /// of byte/short/int/long; otherwise it becomes the nearest double, stored as float if double→float→double
+    /// round-trips unchanged, else double.
     pub fn narrowed(&self) -> Self {
         match self {
             Self::Json(n) => {
-                // First try exact integer parse so integers > 2^53 don't lose precision through f64.
-                if let Ok(l) = n.text().parse::<i64>() {
+                if let Some(l) = exact_decimal_to_i64(n.text()) {
                     return narrow_i64(l);
                 }
                 let v = n.to_f64();
-                // 2^63 (9223372036854775808.0) is the exact exclusive upper bound for i64 in f64;
-                // casting it to i64 saturates to i64::MAX whose f64 cast rounds back to 2^63!
-                const TWO_POW_63: f64 = 9_223_372_036_854_775_808.0;
-                if v.is_finite()
-                    && v >= (i64::MIN as f64)
-                    && v < TWO_POW_63
-                    && v.fract() == 0.0
-                    && !(v == 0.0 && v.is_sign_negative())
-                {
-                    let l = v as i64;
-                    if (l as f64) == v {
-                        return narrow_i64(l);
-                    }
-                }
-                if (v as f32) as f64 == v {
-                    Self::Float(v as f32)
+                let f = v as f32;
+                if f64::from(f) == v {
+                    Self::Float(f)
                 } else {
                     Self::Double(v)
                 }
@@ -141,6 +128,100 @@ impl Num {
             Self::Double(v) => java_double_to_string(v),
             Self::Json(n) => n.text().to_owned(),
         }
+    }
+}
+
+/// Parses a JSON number's exact decimal text as a signed 64-bit integer if and only if its exact
+/// mathematical value is an integer within `i64::MIN..=i64::MAX` (spec A.7.3).
+///
+/// Handles fractional zeros (`2.0`, `-0.0`, `9007199254740993.0`) and exponents (`1e2`, `100e-2`),
+/// while returning `None` for any non-zero fractional part (`1e-400`, `1.0000000000000000001`) or
+/// out-of-range integer (`1e20`, `9223372036854775808`).
+fn exact_decimal_to_i64(text: &str) -> Option<i64> {
+    let (neg, rest) = match text.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, text),
+    };
+    let (mantissa, exp) = match rest.find(['e', 'E']) {
+        Some(i) => {
+            let e = &rest[i + 1..];
+            let (eneg, edigits) = match e.strip_prefix('-') {
+                Some(r) => (true, r),
+                None => (false, e.strip_prefix('+').unwrap_or(e)),
+            };
+            let mut v: i128 = 0;
+            for b in edigits.bytes() {
+                if !b.is_ascii_digit() {
+                    return None;
+                }
+                v = (v * 10 + i128::from(b - b'0')).min(1_000_000_000);
+            }
+            (&rest[..i], if eneg { -v } else { v })
+        }
+        None => (rest, 0),
+    };
+    let (int_part, frac_part) = match mantissa.find('.') {
+        Some(i) => (&mantissa[..i], &mantissa[i + 1..]),
+        None => (mantissa, ""),
+    };
+
+    // Find first and last non-zero digit across `int_part ++ frac_part`.
+    let mut first: Option<usize> = None;
+    let mut last: usize = 0;
+    for (idx, b) in int_part.bytes().chain(frac_part.bytes()).enumerate() {
+        if !b.is_ascii_digit() {
+            return None;
+        }
+        if b != b'0' {
+            if first.is_none() {
+                first = Some(idx);
+            }
+            last = idx;
+        }
+    }
+
+    // All digits are zero (0, -0, -0.0, 0.0e-500, ...): exact integer zero.
+    let Some(first) = first else {
+        return Some(0);
+    };
+
+    // Place value of the last non-zero digit is 10^p, where:
+    // p = exp + int_part.len() - 1 - last.
+    let p = exp + (int_part.len() as i128) - 1 - (last as i128);
+    if p < 0 {
+        return None;
+    }
+
+    let sig_len = (last - first + 1) as i128;
+    if sig_len + p > 19 {
+        return None;
+    }
+
+    let mut mag: u64 = 0;
+    for b in int_part
+        .bytes()
+        .chain(frac_part.bytes())
+        .skip(first)
+        .take(last - first + 1)
+    {
+        mag = mag.checked_mul(10)?.checked_add(u64::from(b - b'0'))?;
+    }
+    for _ in 0..p {
+        mag = mag.checked_mul(10)?;
+    }
+
+    if neg {
+        if mag == i64::MIN.unsigned_abs() {
+            Some(i64::MIN)
+        } else if mag <= i64::MAX as u64 {
+            Some(-(mag as i64))
+        } else {
+            None
+        }
+    } else if mag <= i64::MAX as u64 {
+        Some(mag as i64)
+    } else {
+        None
     }
 }
 
@@ -385,13 +466,13 @@ pub fn read_nbt_string(d: &Dyn) -> DataResult<NbtString> {
     }
 }
 
-/// A boolean: JSON booleans and numbers, NBT numbers.
+/// A boolean: JSON `true`/`false` only (numbers rejected), NBT numbers (non-zero as double).
 pub fn read_bool(d: &Dyn) -> DataResult<bool> {
     match d {
         Dyn::Bool(b) => DataResult::Success(*b),
         Dyn::Num(n) => match n.to_bool() {
             Ok(b) => DataResult::Success(b),
-            Err(m) => hard(m),
+            Err(m) => DataResult::error(m),
         },
         other => DataResult::error(format!("Not a boolean: {}", describe(other))),
     }

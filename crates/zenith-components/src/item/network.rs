@@ -11,6 +11,7 @@ use super::registry::ComponentTypeId;
 use super::stack::{ItemStack, PrototypeRegistry};
 use super::types::{ComponentValue, MapPostProcessing, UnitValue};
 use crate::dynval::Dyn;
+use crate::registry_context::RegistryContext;
 
 /// Maximum number of added or removed component entries in a [`HashedStack`] (spec B.5).
 pub const MAX_HASHED_PATCH_ENTRIES: usize = 256;
@@ -181,6 +182,7 @@ pub fn encode_component_value_network(
 pub fn decode_component_value_network(
     ty: ComponentTypeId,
     bytes: &[u8],
+    registries: &dyn RegistryContext,
 ) -> Result<(ComponentValue, usize), String> {
     match ty {
         ComponentTypeId::CreativeSlotLock => Ok((ComponentValue::Unit(UnitValue), 0)),
@@ -242,9 +244,10 @@ pub fn decode_component_value_network(
                 return Err("Unexpected EOF reading f32".to_owned());
             }
             let f = f32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            let val = decode_component_value(ty, &Dyn::Num(crate::dynval::Num::Float(f)))
-                .demand()
-                .map_err(|e| e.message)?;
+            let val =
+                decode_component_value(ty, &Dyn::Num(crate::dynval::Num::Float(f)), registries)
+                    .demand()
+                    .map_err(|e| e.message)?;
             Ok((val, 4))
         }
         ComponentTypeId::Rarity => {
@@ -288,7 +291,7 @@ pub fn decode_component_value_network(
                 .map_err(|e| format!("Network NBT decode failed for {ty}: {e}"))?
                 .ok_or_else(|| format!("Empty network NBT (TAG_End) for {ty}"))?;
             let consumed = cursor.position() as usize;
-            let val = decode_component_value(ty, &Dyn::from_tag(&tag))
+            let val = decode_component_value(ty, &Dyn::from_tag(&tag), registries)
                 .demand()
                 .map_err(|e| e.message)?;
             Ok((val, consumed))
@@ -342,19 +345,26 @@ fn encode_patch_network_inner(
 }
 
 /// Decodes a [`ComponentPatch`] from the network. Zero/zero decodes to the empty patch.
-pub fn decode_patch_network(bytes: &[u8]) -> Result<(ComponentPatch, usize), String> {
-    decode_patch_network_inner(bytes, false)
+pub fn decode_patch_network(
+    bytes: &[u8],
+    registries: &dyn RegistryContext,
+) -> Result<(ComponentPatch, usize), String> {
+    decode_patch_network_inner(bytes, false, registries)
 }
 
 /// Decodes a length-delimited [`ComponentPatch`] (creative-slot variant): every set value is prefixed
 /// with a `VarInt` byte length and must consume **exactly** that many bytes.
-pub fn decode_patch_delimited(bytes: &[u8]) -> Result<(ComponentPatch, usize), String> {
-    decode_patch_network_inner(bytes, true)
+pub fn decode_patch_delimited(
+    bytes: &[u8],
+    registries: &dyn RegistryContext,
+) -> Result<(ComponentPatch, usize), String> {
+    decode_patch_network_inner(bytes, true, registries)
 }
 
 fn decode_patch_network_inner(
     bytes: &[u8],
     delimited: bool,
+    registries: &dyn RegistryContext,
 ) -> Result<(ComponentPatch, usize), String> {
     let mut off = 0;
     let (set_count, u) = read_varint(&bytes[off..])?;
@@ -391,7 +401,7 @@ fn decode_patch_network_inner(
                 ));
             }
             let slice = &bytes[off..off + len];
-            let (val, consumed) = decode_component_value_network(ty, slice)?;
+            let (val, consumed) = decode_component_value_network(ty, slice, registries)?;
             if consumed != len {
                 return Err(format!(
                     "Delimited component {ty} consumed {consumed} bytes, expected exactly {len}"
@@ -400,7 +410,7 @@ fn decode_patch_network_inner(
             off += len;
             patch.set(ty, val);
         } else {
-            let (val, consumed) = decode_component_value_network(ty, &bytes[off..])?;
+            let (val, consumed) = decode_component_value_network(ty, &bytes[off..], registries)?;
             off += consumed;
             patch.set(ty, val);
         }
@@ -487,12 +497,14 @@ pub fn decode_optional_stack_network(
     bytes: &[u8],
     items: &dyn ItemIdRegistry,
     prototypes: &PrototypeRegistry,
+    registries: &dyn RegistryContext,
 ) -> Result<(ItemStack, usize), String> {
     let (count, mut off) = read_varint(bytes)?;
     if count <= 0 {
         return Ok((ItemStack::empty(), off));
     }
-    let (stack, u) = decode_non_empty_body(&bytes[off..], count, items, prototypes, false)?;
+    let (stack, u) =
+        decode_non_empty_body(&bytes[off..], count, items, prototypes, false, registries)?;
     off += u;
     Ok((stack, off))
 }
@@ -502,6 +514,7 @@ pub fn decode_stack_network(
     bytes: &[u8],
     items: &dyn ItemIdRegistry,
     prototypes: &PrototypeRegistry,
+    registries: &dyn RegistryContext,
 ) -> Result<(ItemStack, usize), String> {
     let (count, mut off) = read_varint(bytes)?;
     if count <= 0 {
@@ -509,7 +522,8 @@ pub fn decode_stack_network(
             "Non-optional item stack cannot be empty (count={count})"
         ));
     }
-    let (stack, u) = decode_non_empty_body(&bytes[off..], count, items, prototypes, false)?;
+    let (stack, u) =
+        decode_non_empty_body(&bytes[off..], count, items, prototypes, false, registries)?;
     off += u;
     Ok((stack, off))
 }
@@ -521,12 +535,14 @@ pub fn decode_creative_slot_stack(
     bytes: &[u8],
     items: &dyn ItemIdRegistry,
     prototypes: &PrototypeRegistry,
+    registries: &dyn RegistryContext,
 ) -> Result<(ItemStack, usize), String> {
     let (count, mut off) = read_varint(bytes)?;
     if count <= 0 {
         return Ok((ItemStack::empty(), off));
     }
-    let (stack, u) = decode_non_empty_body(&bytes[off..], count, items, prototypes, true)?;
+    let (stack, u) =
+        decode_non_empty_body(&bytes[off..], count, items, prototypes, true, registries)?;
     off += u;
     // Spec B.5: must encode with the persistent item-stack codec, or the packet is rejected.
     stack
@@ -542,6 +558,7 @@ fn decode_non_empty_body(
     items: &dyn ItemIdRegistry,
     prototypes: &PrototypeRegistry,
     delimited: bool,
+    registries: &dyn RegistryContext,
 ) -> Result<(ItemStack, usize), String> {
     let mut off = 0;
     let (item_pid, u) = read_varint(&bytes[off..])?;
@@ -551,9 +568,9 @@ fn decode_non_empty_body(
         .ok_or_else(|| format!("Unknown item protocol id: {item_pid}"))?
         .clone();
     let (patch, u) = if delimited {
-        decode_patch_delimited(&bytes[off..])?
+        decode_patch_delimited(&bytes[off..], registries)?
     } else {
-        decode_patch_network(&bytes[off..])?
+        decode_patch_network(&bytes[off..], registries)?
     };
     off += u;
     let stack = ItemStack::from_parts(id, count, &patch, prototypes)?;

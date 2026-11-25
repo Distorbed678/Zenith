@@ -14,10 +14,17 @@ use crate::dynval::{
     read_list, read_long, read_map, read_string,
 };
 use crate::profile::{decode_profile, encode_profile};
+use crate::registry_context::{
+    RegistryContext, check_registry_id, ids as reg_ids, read_registry_id,
+};
 use crate::text::{Component, decode_book_page, decode_component, encode_component};
 
 /// Decodes a persistent component value for `ty`. Rejects transient component types.
-pub fn decode_component_value(ty: ComponentTypeId, d: &Dyn) -> DataResult<ComponentValue> {
+pub fn decode_component_value(
+    ty: ComponentTypeId,
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<ComponentValue> {
     if ty.is_transient() {
         return DataResult::error(format!("{ty} is not a persistent component"));
     }
@@ -31,56 +38,98 @@ pub fn decode_component_value(ty: ComponentTypeId, d: &Dyn) -> DataResult<Compon
             decode_unit(d).map(ComponentValue::Unit)
         }
         UseEffects => decode_use_effects(d).map(ComponentValue::UseEffects),
-        CustomName | ItemName => decode_component(d).map(|c| ComponentValue::Text(Box::new(c))),
+        CustomName | ItemName => {
+            decode_component(d, registries).map(|c| ComponentValue::Text(Box::new(c)))
+        }
         MinimumAttackCharge => read_float_range(d, 0.0, 1.0).map(ComponentValue::Float),
-        DamageType
-        | ItemModel
-        | TooltipStyle
-        | BlockTransformer
-        | JukeboxPlayable
-        | NoteBlockSound
-        | ProvidesPotteryPattern
-        | VillagerVariant
-        | WolfVariant
-        | WolfSoundVariant
-        | PigVariant
-        | PigSoundVariant
-        | CowVariant
-        | CowSoundVariant
-        | ChickenVariant
-        | ChickenSoundVariant
-        | ZombieNautilusVariant
-        | FrogVariant
-        | PaintingVariant
-        | CatVariant
-        | CatSoundVariant => read_identifier(d).map(ComponentValue::Id),
-        Lore => decode_sized_list(d, 0, 256, decode_component).map(ComponentValue::Lore),
+        ItemModel | TooltipStyle | NoteBlockSound => read_identifier(d).map(ComponentValue::Id),
+        DamageType => {
+            read_registry_id(d, reg_ids::damage_type(), registries).map(ComponentValue::Id)
+        }
+        BlockTransformer => {
+            read_registry_id(d, reg_ids::block_transformer(), registries).map(ComponentValue::Id)
+        }
+        JukeboxPlayable => {
+            read_registry_id(d, reg_ids::jukebox_song(), registries).map(ComponentValue::Id)
+        }
+        ProvidesPotteryPattern => read_registry_id(d, reg_ids::decorated_pot_pattern(), registries)
+            .map(ComponentValue::Id),
+        VillagerVariant => {
+            read_registry_id(d, reg_ids::villager_type(), registries).map(ComponentValue::Id)
+        }
+        WolfVariant => {
+            read_registry_id(d, reg_ids::wolf_variant(), registries).map(ComponentValue::Id)
+        }
+        WolfSoundVariant => {
+            read_registry_id(d, reg_ids::wolf_sound_variant(), registries).map(ComponentValue::Id)
+        }
+        PigVariant => {
+            read_registry_id(d, reg_ids::pig_variant(), registries).map(ComponentValue::Id)
+        }
+        PigSoundVariant => {
+            read_registry_id(d, reg_ids::pig_sound_variant(), registries).map(ComponentValue::Id)
+        }
+        CowVariant => {
+            read_registry_id(d, reg_ids::cow_variant(), registries).map(ComponentValue::Id)
+        }
+        CowSoundVariant => {
+            read_registry_id(d, reg_ids::cow_sound_variant(), registries).map(ComponentValue::Id)
+        }
+        ChickenVariant => {
+            read_registry_id(d, reg_ids::chicken_variant(), registries).map(ComponentValue::Id)
+        }
+        ChickenSoundVariant => read_registry_id(d, reg_ids::chicken_sound_variant(), registries)
+            .map(ComponentValue::Id),
+        ZombieNautilusVariant => {
+            read_registry_id(d, reg_ids::zombie_nautilus_variant(), registries)
+                .map(ComponentValue::Id)
+        }
+        FrogVariant => {
+            read_registry_id(d, reg_ids::frog_variant(), registries).map(ComponentValue::Id)
+        }
+        PaintingVariant => {
+            read_registry_id(d, reg_ids::painting_variant(), registries).map(ComponentValue::Id)
+        }
+        CatVariant => {
+            read_registry_id(d, reg_ids::cat_variant(), registries).map(ComponentValue::Id)
+        }
+        CatSoundVariant => {
+            read_registry_id(d, reg_ids::cat_sound_variant(), registries).map(ComponentValue::Id)
+        }
+        Lore => decode_sized_list(d, 0, 256, |v| decode_component(v, registries))
+            .map(ComponentValue::Lore),
         Rarity => decode_rarity(d).map(ComponentValue::Rarity),
         Enchantments | StoredEnchantments => {
-            decode_enchantments(d).map(ComponentValue::Enchantments)
+            decode_enchantments(d, registries).map(ComponentValue::Enchantments)
         }
         CanPlaceOn | CanBreak => decode_block_predicates(d).map(ComponentValue::BlockPredicates),
-        AttributeModifiers => decode_attribute_modifiers(d).map(ComponentValue::AttributeModifiers),
+        AttributeModifiers => {
+            decode_attribute_modifiers(d, registries).map(ComponentValue::AttributeModifiers)
+        }
         CustomModelData => decode_custom_model_data(d).map(ComponentValue::CustomModelData),
-        TooltipDisplay => decode_tooltip_display(d).map(ComponentValue::TooltipDisplay),
+        TooltipDisplay => decode_tooltip_display(d, registries).map(ComponentValue::TooltipDisplay),
         EnchantmentGlintOverride => read_bool(d).map(ComponentValue::Bool),
         Food => decode_food(d).map(ComponentValue::Food),
-        Consumable => decode_consumable(d).map(ComponentValue::Consumable),
+        Consumable => decode_consumable(d, registries).map(ComponentValue::Consumable),
         UseRemainder | SulfurCubeContent => {
-            ItemTemplate::decode(d).map(|t| ComponentValue::ItemTemplate(Box::new(t)))
+            ItemTemplate::decode(d, registries).map(|t| ComponentValue::ItemTemplate(Box::new(t)))
         }
         UseCooldown => decode_use_cooldown(d).map(ComponentValue::UseCooldown),
-        DamageResistant => decode_damage_resistant(d).map(ComponentValue::DamageResistant),
-        Tool => decode_tool(d).map(ComponentValue::Tool),
+        DamageResistant => {
+            decode_damage_resistant(d, registries).map(ComponentValue::DamageResistant)
+        }
+        Tool => decode_tool(d, registries).map(ComponentValue::Tool),
         Weapon => decode_weapon(d).map(ComponentValue::Weapon),
         AttackRange => decode_attack_range(d).map(ComponentValue::AttackRange),
         Enchantable => decode_enchantable(d).map(ComponentValue::Enchantable),
-        Equippable => decode_equippable(d).map(ComponentValue::Equippable),
-        Repairable => decode_repairable(d).map(ComponentValue::Repairable),
-        DeathProtection => decode_death_protection(d).map(ComponentValue::DeathProtection),
-        BlocksAttacks => decode_blocks_attacks(d).map(ComponentValue::BlocksAttacks),
-        PiercingWeapon => decode_piercing_weapon(d).map(ComponentValue::PiercingWeapon),
-        KineticWeapon => decode_kinetic_weapon(d).map(ComponentValue::KineticWeapon),
+        Equippable => decode_equippable(d, registries).map(ComponentValue::Equippable),
+        Repairable => decode_repairable(d, registries).map(ComponentValue::Repairable),
+        DeathProtection => {
+            decode_death_protection(d, registries).map(ComponentValue::DeathProtection)
+        }
+        BlocksAttacks => decode_blocks_attacks(d, registries).map(ComponentValue::BlocksAttacks),
+        PiercingWeapon => decode_piercing_weapon(d, registries).map(ComponentValue::PiercingWeapon),
+        KineticWeapon => decode_kinetic_weapon(d, registries).map(ComponentValue::KineticWeapon),
         AttackAnimation | InteractAnimation => {
             decode_swing_animation(d).map(ComponentValue::SwingAnimation)
         }
@@ -96,44 +145,58 @@ pub fn decode_component_value(ty: ComponentTypeId, d: &Dyn) -> DataResult<Compon
         | CushionColor => decode_dye(d).map(ComponentValue::Dye),
         DyedColor => decode_rgb_color(d).map(ComponentValue::Int),
         MapId => read_int(d).map(ComponentValue::Int),
-        MapDecorations => decode_map_decorations(d).map(ComponentValue::MapDecorations),
-        ChargedProjectiles => decode_sized_list(d, 0, 1024, ItemTemplate::decode)
-            .map(ComponentValue::ChargedProjectiles),
-        BundleContents => {
-            decode_list_of(d, ItemTemplate::decode).map(ComponentValue::BundleContents)
+        MapDecorations => decode_map_decorations(d, registries).map(ComponentValue::MapDecorations),
+        ChargedProjectiles => {
+            decode_sized_list(d, 0, 1024, |v| ItemTemplate::decode(v, registries))
+                .map(ComponentValue::ChargedProjectiles)
         }
-        PotionContents => decode_potion_contents(d).map(ComponentValue::PotionContents),
+        BundleContents => decode_list_of(d, |v| ItemTemplate::decode(v, registries))
+            .map(ComponentValue::BundleContents),
+        PotionContents => decode_potion_contents(d, registries).map(ComponentValue::PotionContents),
         PotionDurationScale => read_float_min(d, 0.0).map(ComponentValue::Float),
-        SuspiciousStewEffects => decode_list_of(d, decode_suspicious_stew_effect)
-            .map(ComponentValue::SuspiciousStewEffects),
+        SuspiciousStewEffects => {
+            decode_list_of(d, |v| decode_suspicious_stew_effect(v, registries))
+                .map(ComponentValue::SuspiciousStewEffects)
+        }
         WritableBookContent => {
             decode_writable_book_content(d).map(ComponentValue::WritableBookContent)
         }
         WrittenBookContent => {
-            decode_written_book_content(d).map(ComponentValue::WrittenBookContent)
+            decode_written_book_content(d, registries).map(ComponentValue::WrittenBookContent)
         }
-        Trim => decode_trim(d).map(ComponentValue::Trim),
-        DebugStickState => decode_debug_stick_state(d).map(ComponentValue::DebugStickState),
-        EntityData | BlockEntityData => {
-            decode_typed_entity_data(d).map(ComponentValue::TypedEntityData)
+        Trim => decode_trim(d, registries).map(ComponentValue::Trim),
+        DebugStickState => {
+            decode_debug_stick_state(d, registries).map(ComponentValue::DebugStickState)
         }
-        Instrument | ProvidesTrimMaterial | BreakSound => {
-            decode_holder_ref(d).map(ComponentValue::Holder)
+        EntityData => decode_typed_entity_data(d, reg_ids::entity_type(), registries)
+            .map(ComponentValue::TypedEntityData),
+        BlockEntityData => decode_typed_entity_data(d, reg_ids::block_entity_type(), registries)
+            .map(ComponentValue::TypedEntityData),
+        Instrument => {
+            decode_holder_ref(d, reg_ids::instrument(), registries).map(ComponentValue::Holder)
+        }
+        ProvidesTrimMaterial => {
+            decode_holder_ref(d, reg_ids::trim_material(), registries).map(ComponentValue::Holder)
+        }
+        BreakSound => {
+            decode_holder_ref(d, reg_ids::sound_event(), registries).map(ComponentValue::Holder)
         }
         OminousBottleAmplifier => read_int_range(d, 0, 4).map(ComponentValue::Int),
-        ProvidesBannerPatterns => decode_holder_set(d).map(ComponentValue::HolderSet),
+        ProvidesBannerPatterns => decode_holder_set(d, reg_ids::banner_pattern(), registries)
+            .map(ComponentValue::HolderSet),
         Recipes => decode_list_of(d, read_identifier).map(ComponentValue::IdList),
         LodestoneTracker => decode_lodestone_tracker(d).map(ComponentValue::LodestoneTracker),
         FireworkExplosion => decode_firework_explosion(d).map(ComponentValue::FireworkExplosion),
         Fireworks => decode_fireworks(d).map(ComponentValue::Fireworks),
         Profile => decode_profile(d).map(ComponentValue::Profile),
-        BannerPatterns => {
-            decode_list_of(d, decode_banner_pattern_layer).map(ComponentValue::BannerPatterns)
-        }
-        PotDecorations => decode_pot_decorations(d).map(ComponentValue::PotDecorations),
-        Container => decode_container(d).map(ComponentValue::Container),
+        BannerPatterns => decode_list_of(d, |v| decode_banner_pattern_layer(v, registries))
+            .map(ComponentValue::BannerPatterns),
+        PotDecorations => decode_pot_decorations(d, registries).map(ComponentValue::PotDecorations),
+        Container => decode_container(d, registries).map(ComponentValue::Container),
         BlockState => decode_block_state(d).map(ComponentValue::BlockState),
-        Bees => decode_list_of(d, decode_beehive_occupant).map(ComponentValue::Bees),
+        Bees => {
+            decode_list_of(d, |v| decode_beehive_occupant(v, registries)).map(ComponentValue::Bees)
+        }
         Lock => {
             if d.is_map() {
                 DataResult::Success(ComponentValue::Lock(d.clone()))
@@ -145,13 +208,13 @@ pub fn decode_component_value(ty: ComponentTypeId, d: &Dyn) -> DataResult<Compon
         Compostable => decode_compostable(d).map(ComponentValue::Compostable),
         CookingFuel => decode_cooking_fuel(d).map(ComponentValue::CookingFuel),
         BrewingFuel => decode_brewing_fuel(d).map(ComponentValue::BrewingFuel),
-        MobVisibility => decode_mob_visibility(d).map(ComponentValue::MobVisibility),
+        MobVisibility => decode_mob_visibility(d, registries).map(ComponentValue::MobVisibility),
         FoxVariant | SalmonSize | ParrotVariant | TropicalFishPattern | MooshroomVariant
         | RabbitVariant | HorseVariant | LlamaVariant | AxolotlVariant => {
             decode_fixed_enum(ty, d).map(ComponentValue::EnumName)
         }
         SignTextFront | SignTextBack => {
-            decode_sign_text(d).map(|st| ComponentValue::SignText(Box::new(st)))
+            decode_sign_text(d, registries).map(|st| ComponentValue::SignText(Box::new(st)))
         }
         CreativeSlotLock | AdditionalTradeCost | MapPostProcessing => {
             unreachable!("checked is_transient above")
@@ -467,9 +530,13 @@ fn decode_compound_or_snbt(d: &Dyn) -> DataResult<Compound> {
     }
 }
 
-fn decode_holder_ref(d: &Dyn) -> DataResult<HolderRef> {
+fn decode_holder_ref(
+    d: &Dyn,
+    registry: &Identifier,
+    registries: &dyn RegistryContext,
+) -> DataResult<HolderRef> {
     match d {
-        Dyn::Str(_) => read_identifier(d).map(HolderRef::Id),
+        Dyn::Str(_) => read_registry_id(d, registry, registries).map(HolderRef::Id),
         Dyn::Map(_) => DataResult::Success(HolderRef::Inline(d.clone())),
         other => DataResult::error(format!(
             "Expected identifier or inline definition, got {}",
@@ -485,23 +552,37 @@ fn encode_holder_ref(h: &HolderRef) -> Dyn {
     }
 }
 
-fn decode_holder_set(d: &Dyn) -> DataResult<HolderSetRef> {
+fn decode_holder_set(
+    d: &Dyn,
+    registry: &Identifier,
+    registries: &dyn RegistryContext,
+) -> DataResult<HolderSetRef> {
     match d {
         Dyn::Str(s) => {
             let s = s.to_string_lossy();
             if let Some(tag) = s.strip_prefix('#') {
                 match Identifier::parse(tag) {
-                    Ok(id) => DataResult::Success(HolderSetRef::Tag(id)),
+                    Ok(id) => {
+                        // Hook for future tag validation (spec B.7): tags are not enforced until
+                        // data-pack tag tables are loaded into RegistryContext.
+                        let _ = registries.lookup_tag(registry, &id);
+                        DataResult::Success(HolderSetRef::Tag(id))
+                    }
                     Err(_) => DataResult::error(format!("Invalid tag id: {s}")),
                 }
             } else {
                 match Identifier::parse(&s) {
-                    Ok(id) => DataResult::Success(HolderSetRef::Ids(vec![id])),
+                    Ok(id) => match check_registry_id(registry, &id, registries) {
+                        Ok(()) => DataResult::Success(HolderSetRef::Ids(vec![id])),
+                        Err(m) => DataResult::error(m),
+                    },
                     Err(_) => DataResult::error(format!("Not a valid resource location: {s}")),
                 }
             }
         }
-        Dyn::List(_) => decode_list_of(d, read_identifier).map(HolderSetRef::Ids),
+        Dyn::List(_) => {
+            decode_list_of(d, |v| read_registry_id(v, registry, registries)).map(HolderSetRef::Ids)
+        }
         other => DataResult::error(format!(
             "Expected tag, id, or id list for holder set, got {}",
             other.kind()
@@ -681,7 +762,7 @@ fn encode_use_effects(u: &UseEffects) -> Dyn {
     b.build()
 }
 
-fn decode_enchantments(d: &Dyn) -> DataResult<Enchantments> {
+fn decode_enchantments(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Enchantments> {
     let entries = match read_map(d) {
         DataResult::Success(m) => m,
         other => return other.map(|_| Enchantments::default()),
@@ -696,6 +777,10 @@ fn decode_enchantments(d: &Dyn) -> DataResult<Enchantments> {
                 continue;
             }
         };
+        if let Err(m) = check_registry_id(reg_ids::enchantment(), &id, registries) {
+            errors.push(m);
+            continue;
+        }
         match read_int_range(v, 1, 255) {
             DataResult::Success(lvl) => {
                 levels.insert(id, lvl);
@@ -736,10 +821,15 @@ fn decode_block_predicates(d: &Dyn) -> DataResult<Vec<Dyn>> {
     }
 }
 
-fn decode_attribute_modifiers(d: &Dyn) -> DataResult<Vec<AttributeModifierEntry>> {
+fn decode_attribute_modifiers(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<Vec<AttributeModifierEntry>> {
     decode_list_of(d, |entry| {
         let mut r = Rec::new(entry);
-        let attribute = r.required("type", read_identifier);
+        let attribute = r.required("type", |v| {
+            read_registry_id(v, reg_ids::attribute(), registries)
+        });
         let id = r.required("id", read_identifier);
         let amount = r.required("amount", read_double);
         let operation = r.required("operation", |v| {
@@ -754,11 +844,9 @@ fn decode_attribute_modifiers(d: &Dyn) -> DataResult<Vec<AttributeModifierEntry>
                 None => DataResult::error(format!("Unknown slot group: {s}")),
             })
         });
-        let display = r.optional(
-            "display",
-            AttributeDisplay::Default,
-            decode_attribute_display,
-        );
+        let display = r.optional("display", AttributeDisplay::Default, |v| {
+            decode_attribute_display(v, registries)
+        });
         r.finish(|| {
             Some(AttributeModifierEntry {
                 attribute: attribute?,
@@ -772,7 +860,10 @@ fn decode_attribute_modifiers(d: &Dyn) -> DataResult<Vec<AttributeModifierEntry>
     })
 }
 
-fn decode_attribute_display(d: &Dyn) -> DataResult<AttributeDisplay> {
+fn decode_attribute_display(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<AttributeDisplay> {
     let mut r = Rec::new(d);
     let Some(ty) = r.required("type", read_string) else {
         return r.finish(|| None);
@@ -781,7 +872,7 @@ fn decode_attribute_display(d: &Dyn) -> DataResult<AttributeDisplay> {
         "default" => Some(AttributeDisplay::Default),
         "hidden" => Some(AttributeDisplay::Hidden),
         "override" => r
-            .required("value", decode_component)
+            .required("value", |v| decode_component(v, registries))
             .map(|c| AttributeDisplay::Override(Box::new(c))),
         other => {
             r.push_error(format!("Unknown attribute display type: {other}"));
@@ -813,8 +904,8 @@ fn encode_attribute_modifier(m: &AttributeModifierEntry) -> DataResult<Dyn> {
                 other => return other,
             };
             let mut db = MapBuilder::new();
-            db.put("type", Dyn::string("override"));
             db.put("value", v);
+            db.put("type", Dyn::string("override"));
             b.put("display", db.build());
         }
     }
@@ -873,11 +964,13 @@ fn encode_custom_model_data(cmd: &CustomModelData) -> Dyn {
     b.build()
 }
 
-fn decode_tooltip_display(d: &Dyn) -> DataResult<TooltipDisplay> {
+fn decode_tooltip_display(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<TooltipDisplay> {
     let mut r = Rec::new(d);
     let hide_tooltip = r.optional("hide_tooltip", false, read_bool);
     let hidden_components = r.optional("hidden_components", Vec::new(), |v| {
-        decode_list_of(v, read_identifier)
+        decode_list_of(v, |iv| {
+            read_registry_id(iv, reg_ids::data_component_type(), registries)
+        })
     });
     r.finish(|| {
         Some(TooltipDisplay {
@@ -930,9 +1023,11 @@ fn encode_food(f: &FoodProperties) -> Dyn {
     b.build()
 }
 
-fn decode_mob_effect(d: &Dyn) -> DataResult<MobEffectInstance> {
+fn decode_mob_effect(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<MobEffectInstance> {
     let mut r = Rec::new(d);
-    let id = r.required("id", read_identifier);
+    let id = r.required("id", |v| {
+        read_registry_id(v, reg_ids::mob_effect(), registries)
+    });
     let amplifier = r.optional("amplifier", 0u8, |v| {
         read_int_range(v, 0, 255).map(|n| n as u8)
     });
@@ -941,7 +1036,7 @@ fn decode_mob_effect(d: &Dyn) -> DataResult<MobEffectInstance> {
     let show_particles = r.optional("show_particles", true, read_bool);
     let show_icon = r.optional_opt("show_icon", read_bool);
     let hidden_effect = r
-        .optional_opt("hidden_effect", decode_mob_effect)
+        .optional_opt("hidden_effect", |v| decode_mob_effect(v, registries))
         .map(Box::new);
     r.finish(|| {
         Some(MobEffectInstance {
@@ -980,7 +1075,7 @@ fn encode_mob_effect(e: &MobEffectInstance) -> Dyn {
     b.build()
 }
 
-fn decode_consume_effect(d: &Dyn) -> DataResult<ConsumeEffect> {
+fn decode_consume_effect(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<ConsumeEffect> {
     let mut r = Rec::new(d);
     let Some(ty) = r.required("type", read_identifier) else {
         return r.finish(|| None);
@@ -989,9 +1084,9 @@ fn decode_consume_effect(d: &Dyn) -> DataResult<ConsumeEffect> {
         "minecraft:apply_effects" => {
             let effects = r.required("effects", |v| {
                 if v.is_map() {
-                    decode_mob_effect(v).map(|e| vec![e])
+                    decode_mob_effect(v, registries).map(|e| vec![e])
                 } else {
-                    decode_list_of(v, decode_mob_effect)
+                    decode_list_of(v, |ev| decode_mob_effect(ev, registries))
                 }
             });
             let probability = r.optional("probability", 1.0, |v| read_float_range(v, 0.0, 1.0));
@@ -1001,7 +1096,9 @@ fn decode_consume_effect(d: &Dyn) -> DataResult<ConsumeEffect> {
             })
         }
         "minecraft:remove_effects" => r
-            .required("effects", decode_holder_set)
+            .required("effects", |v| {
+                decode_holder_set(v, reg_ids::mob_effect(), registries)
+            })
             .map(|effects| ConsumeEffect::RemoveEffects { effects }),
         "minecraft:clear_all_effects" => Some(ConsumeEffect::ClearAllEffects),
         "minecraft:teleport_randomly" => {
@@ -1009,7 +1106,9 @@ fn decode_consume_effect(d: &Dyn) -> DataResult<ConsumeEffect> {
             Some(ConsumeEffect::TeleportRandomly { diameter })
         }
         "minecraft:play_sound" => r
-            .required("sound", decode_holder_ref)
+            .required("sound", |v| {
+                decode_holder_ref(v, reg_ids::sound_event(), registries)
+            })
             .map(|sound| ConsumeEffect::PlaySound { sound }),
         other => {
             r.push_error(format!("Unknown consume effect type: {other}"));
@@ -1026,7 +1125,6 @@ fn encode_consume_effect(e: &ConsumeEffect) -> Dyn {
             effects,
             probability,
         } => {
-            b.put("type", Dyn::string("minecraft:apply_effects"));
             b.put(
                 "effects",
                 Dyn::List(effects.iter().map(encode_mob_effect).collect()),
@@ -1034,29 +1132,30 @@ fn encode_consume_effect(e: &ConsumeEffect) -> Dyn {
             if *probability != 1.0 {
                 b.put("probability", Dyn::Num(Num::Float(*probability)));
             }
+            b.put("type", Dyn::string("minecraft:apply_effects"));
         }
         ConsumeEffect::RemoveEffects { effects } => {
-            b.put("type", Dyn::string("minecraft:remove_effects"));
             b.put("effects", encode_holder_set(effects));
+            b.put("type", Dyn::string("minecraft:remove_effects"));
         }
         ConsumeEffect::ClearAllEffects => {
             b.put("type", Dyn::string("minecraft:clear_all_effects"));
         }
         ConsumeEffect::TeleportRandomly { diameter } => {
-            b.put("type", Dyn::string("minecraft:teleport_randomly"));
             if *diameter != 16.0 {
                 b.put("diameter", Dyn::Num(Num::Float(*diameter)));
             }
+            b.put("type", Dyn::string("minecraft:teleport_randomly"));
         }
         ConsumeEffect::PlaySound { sound } => {
-            b.put("type", Dyn::string("minecraft:play_sound"));
             b.put("sound", encode_holder_ref(sound));
+            b.put("type", Dyn::string("minecraft:play_sound"));
         }
     }
     b.build()
 }
 
-fn decode_consumable(d: &Dyn) -> DataResult<Consumable> {
+fn decode_consumable(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Consumable> {
     let def = Consumable::default();
     let mut r = Rec::new(d);
     let consume_seconds = r.optional("consume_seconds", def.consume_seconds, |v| {
@@ -1068,10 +1167,12 @@ fn decode_consumable(d: &Dyn) -> DataResult<Consumable> {
             None => DataResult::error(format!("Unknown consume animation: {s}")),
         })
     });
-    let sound = r.optional("sound", def.sound, decode_holder_ref);
+    let sound = r.optional("sound", def.sound, |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     let has_consume_particles = r.optional("has_consume_particles", true, read_bool);
     let on_consume_effects = r.optional("on_consume_effects", Vec::new(), |v| {
-        decode_list_of(v, decode_consume_effect)
+        decode_list_of(v, |ev| decode_consume_effect(ev, registries))
     });
     r.finish(|| {
         Some(Consumable {
@@ -1134,18 +1235,22 @@ fn encode_use_cooldown(uc: &UseCooldown) -> Dyn {
     b.build()
 }
 
-fn decode_damage_resistant(d: &Dyn) -> DataResult<HolderSetRef> {
+fn decode_damage_resistant(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<HolderSetRef> {
     let mut r = Rec::new(d);
-    let types = r.required("types", decode_holder_set);
+    let types = r.required("types", |v| {
+        decode_holder_set(v, reg_ids::damage_type(), registries)
+    });
     r.finish(|| types)
 }
 
-fn decode_tool(d: &Dyn) -> DataResult<ToolProperties> {
+fn decode_tool(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<ToolProperties> {
     let mut r = Rec::new(d);
     let rules = r.required("rules", |v| {
         decode_list_of(v, |rule| {
             let mut rr = Rec::new(rule);
-            let blocks = rr.required("blocks", decode_holder_set);
+            let blocks = rr.required("blocks", |bv| {
+                decode_holder_set(bv, reg_ids::block(), registries)
+            });
             let speed = rr.optional_opt("speed", |sv| read_float_gt(sv, 0.0));
             let correct_for_drops = rr.optional_opt("correct_for_drops", read_bool);
             rr.finish(|| {
@@ -1312,7 +1417,7 @@ fn default_shearing_sound() -> HolderRef {
     HolderRef::Id(Identifier::parse("minecraft:item.shears.snip").expect("valid constant"))
 }
 
-fn decode_equippable(d: &Dyn) -> DataResult<Equippable> {
+fn decode_equippable(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<Equippable> {
     let mut r = Rec::new(d);
     let slot = r.required("slot", |v| {
         read_string(v).and_then(|s| match EquipmentSlot::parse(&s) {
@@ -1320,20 +1425,22 @@ fn decode_equippable(d: &Dyn) -> DataResult<Equippable> {
             None => DataResult::error(format!("Unknown equipment slot: {s}")),
         })
     });
-    let equip_sound = r.optional("equip_sound", default_equip_sound(), decode_holder_ref);
+    let equip_sound = r.optional("equip_sound", default_equip_sound(), |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     let asset_id = r.optional_opt("asset_id", read_identifier);
     let camera_overlay = r.optional_opt("camera_overlay", read_identifier);
-    let allowed_entities = r.optional_opt("allowed_entities", decode_holder_set);
+    let allowed_entities = r.optional_opt("allowed_entities", |v| {
+        decode_holder_set(v, reg_ids::entity_type(), registries)
+    });
     let dispensable = r.optional("dispensable", true, read_bool);
     let swappable = r.optional("swappable", true, read_bool);
     let damage_on_hurt = r.optional("damage_on_hurt", true, read_bool);
     let equip_on_interact = r.optional("equip_on_interact", false, read_bool);
     let can_be_sheared = r.optional("can_be_sheared", false, read_bool);
-    let shearing_sound = r.optional(
-        "shearing_sound",
-        default_shearing_sound(),
-        decode_holder_ref,
-    );
+    let shearing_sound = r.optional("shearing_sound", default_shearing_sound(), |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     r.finish(|| {
         Some(Equippable {
             slot: slot?,
@@ -1387,21 +1494,26 @@ fn encode_equippable(e: &Equippable) -> Dyn {
     b.build()
 }
 
-fn decode_repairable(d: &Dyn) -> DataResult<HolderSetRef> {
+fn decode_repairable(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<HolderSetRef> {
     let mut r = Rec::new(d);
-    let items = r.required("items", decode_holder_set);
+    let items = r.required("items", |v| {
+        decode_holder_set(v, reg_ids::item(), registries)
+    });
     r.finish(|| items)
 }
 
-fn decode_death_protection(d: &Dyn) -> DataResult<Vec<ConsumeEffect>> {
+fn decode_death_protection(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<Vec<ConsumeEffect>> {
     let mut r = Rec::new(d);
     let effects = r.optional("death_effects", Vec::new(), |v| {
-        decode_list_of(v, decode_consume_effect)
+        decode_list_of(v, |ev| decode_consume_effect(ev, registries))
     });
     r.finish(|| Some(effects))
 }
 
-fn decode_blocks_attacks(d: &Dyn) -> DataResult<BlocksAttacks> {
+fn decode_blocks_attacks(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<BlocksAttacks> {
     let def = BlocksAttacks::default();
     let mut r = Rec::new(d);
     let block_delay_seconds = r.optional("block_delay_seconds", def.block_delay_seconds, |v| {
@@ -1417,7 +1529,9 @@ fn decode_blocks_attacks(d: &Dyn) -> DataResult<BlocksAttacks> {
             let horizontal_blocking_angle = rr.optional("horizontal_blocking_angle", 90.0, |fv| {
                 read_float_gt(fv, 0.0)
             });
-            let damage_type = rr.optional_opt("type", decode_holder_set);
+            let damage_type = rr.optional_opt("type", |dv| {
+                decode_holder_set(dv, reg_ids::damage_type(), registries)
+            });
             let base = rr.required("base", read_float);
             let factor = rr.required("factor", read_float);
             rr.finish(|| {
@@ -1443,9 +1557,15 @@ fn decode_blocks_attacks(d: &Dyn) -> DataResult<BlocksAttacks> {
             })
         })
     });
-    let bypassed_by = r.optional_opt("bypassed_by", decode_holder_set);
-    let block_sound = r.optional_opt("block_sound", decode_holder_ref);
-    let disabled_sound = r.optional_opt("disabled_sound", decode_holder_ref);
+    let bypassed_by = r.optional_opt("bypassed_by", |v| {
+        decode_holder_set(v, reg_ids::damage_type(), registries)
+    });
+    let block_sound = r.optional_opt("block_sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
+    let disabled_sound = r.optional_opt("disabled_sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     r.finish(|| {
         Some(BlocksAttacks {
             block_delay_seconds,
@@ -1515,12 +1635,16 @@ fn encode_blocks_attacks(ba: &BlocksAttacks) -> Dyn {
     b.build()
 }
 
-fn decode_piercing_weapon(d: &Dyn) -> DataResult<PiercingWeapon> {
+fn decode_piercing_weapon(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<PiercingWeapon> {
     let mut r = Rec::new(d);
     let deals_knockback = r.optional("deals_knockback", true, read_bool);
     let dismounts = r.optional("dismounts", false, read_bool);
-    let sound = r.optional_opt("sound", decode_holder_ref);
-    let hit_sound = r.optional_opt("hit_sound", decode_holder_ref);
+    let sound = r.optional_opt("sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
+    let hit_sound = r.optional_opt("hit_sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     r.finish(|| {
         Some(PiercingWeapon {
             deals_knockback,
@@ -1580,7 +1704,7 @@ fn encode_kinetic_condition(kc: &KineticCondition) -> Dyn {
     b.build()
 }
 
-fn decode_kinetic_weapon(d: &Dyn) -> DataResult<KineticWeapon> {
+fn decode_kinetic_weapon(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<KineticWeapon> {
     let def = KineticWeapon::default();
     let mut r = Rec::new(d);
     let contact_cooldown_ticks =
@@ -1593,8 +1717,12 @@ fn decode_kinetic_weapon(d: &Dyn) -> DataResult<KineticWeapon> {
     let damage_conditions = r.optional_opt("damage_conditions", decode_kinetic_condition);
     let forward_movement = r.optional("forward_movement", def.forward_movement, read_float);
     let damage_multiplier = r.optional("damage_multiplier", def.damage_multiplier, read_float);
-    let sound = r.optional_opt("sound", decode_holder_ref);
-    let hit_sound = r.optional_opt("hit_sound", decode_holder_ref);
+    let sound = r.optional_opt("sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
+    let hit_sound = r.optional_opt("hit_sound", |v| {
+        decode_holder_ref(v, reg_ids::sound_event(), registries)
+    });
     r.finish(|| {
         Some(KineticWeapon {
             contact_cooldown_ticks,
@@ -1683,7 +1811,10 @@ fn decode_villager_food(d: &Dyn) -> DataResult<i32> {
     r.finish(|| nutrition)
 }
 
-fn decode_map_decorations(d: &Dyn) -> DataResult<BTreeMap<String, MapDecoration>> {
+fn decode_map_decorations(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<BTreeMap<String, MapDecoration>> {
     let entries = match read_map(d) {
         DataResult::Success(m) => m,
         other => return other.map(|_| BTreeMap::new()),
@@ -1692,7 +1823,9 @@ fn decode_map_decorations(d: &Dyn) -> DataResult<BTreeMap<String, MapDecoration>
     let mut errors = Vec::new();
     for (k, v) in entries {
         let mut r = Rec::new(v);
-        let decoration_type = r.required("type", read_identifier);
+        let decoration_type = r.required("type", |tv| {
+            read_registry_id(tv, reg_ids::map_decoration_type(), registries)
+        });
         let x = r.required("x", read_double);
         let z = r.required("z", read_double);
         let rotation = r.required("rotation", read_float);
@@ -1731,19 +1864,21 @@ fn encode_map_decorations(m: &BTreeMap<String, MapDecoration>) -> Dyn {
     b.build()
 }
 
-fn decode_potion_contents(d: &Dyn) -> DataResult<PotionContents> {
+fn decode_potion_contents(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<PotionContents> {
     // Spec B.7 & edge case 44: bare potion id string OR object; encodes as object.
     if matches!(d, Dyn::Str(_)) {
-        return read_identifier(d).map(|id| PotionContents {
+        return read_registry_id(d, reg_ids::potion(), registries).map(|id| PotionContents {
             potion: Some(id),
             ..PotionContents::default()
         });
     }
     let mut r = Rec::new(d);
-    let potion = r.optional_opt("potion", read_identifier);
+    let potion = r.optional_opt("potion", |v| {
+        read_registry_id(v, reg_ids::potion(), registries)
+    });
     let custom_color = r.optional_opt("custom_color", read_int);
     let custom_effects = r.optional("custom_effects", Vec::new(), |v| {
-        decode_list_of(v, decode_mob_effect)
+        decode_list_of(v, |ev| decode_mob_effect(ev, registries))
     });
     let custom_name = r.optional_opt("custom_name", read_string);
     r.finish(|| {
@@ -1776,9 +1911,14 @@ fn encode_potion_contents(pc: &PotionContents) -> Dyn {
     b.build()
 }
 
-fn decode_suspicious_stew_effect(d: &Dyn) -> DataResult<SuspiciousStewEffect> {
+fn decode_suspicious_stew_effect(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<SuspiciousStewEffect> {
     let mut r = Rec::new(d);
-    let id = r.required("id", read_identifier);
+    let id = r.required("id", |v| {
+        read_registry_id(v, reg_ids::mob_effect(), registries)
+    });
     let duration = r.lenient("duration", 160, read_int);
     r.finish(|| Some(SuspiciousStewEffect { id: id?, duration }))
 }
@@ -1827,7 +1967,10 @@ fn encode_writable_book_content(wbc: &WritableBookContent) -> Dyn {
     b.build()
 }
 
-fn decode_written_book_content(d: &Dyn) -> DataResult<WrittenBookContent> {
+fn decode_written_book_content(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<WrittenBookContent> {
     let mut r = Rec::new(d);
     let title = r.required("title", |v| {
         decode_filterable(v, |s| {
@@ -1843,7 +1986,9 @@ fn decode_written_book_content(d: &Dyn) -> DataResult<WrittenBookContent> {
     let author = r.required("author", read_string);
     let generation = r.optional("generation", 0, |v| read_int_range(v, 0, 3));
     let pages = r.optional("pages", Vec::new(), |v| {
-        decode_list_of(v, |p| decode_filterable(p, decode_book_page))
+        decode_list_of(v, |p| {
+            decode_filterable(p, |pv| decode_book_page(pv, registries))
+        })
     });
     let resolved = r.optional("resolved", false, read_bool);
     r.finish(|| {
@@ -1884,10 +2029,14 @@ fn encode_written_book_content(wbc: &WrittenBookContent) -> DataResult<Dyn> {
     DataResult::Success(b.build())
 }
 
-fn decode_trim(d: &Dyn) -> DataResult<ArmorTrim> {
+fn decode_trim(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<ArmorTrim> {
     let mut r = Rec::new(d);
-    let material = r.required("material", decode_holder_ref);
-    let pattern = r.required("pattern", decode_holder_ref);
+    let material = r.required("material", |v| {
+        decode_holder_ref(v, reg_ids::trim_material(), registries)
+    });
+    let pattern = r.required("pattern", |v| {
+        decode_holder_ref(v, reg_ids::trim_pattern(), registries)
+    });
     r.finish(|| {
         Some(ArmorTrim {
             material: material?,
@@ -1896,7 +2045,10 @@ fn decode_trim(d: &Dyn) -> DataResult<ArmorTrim> {
     })
 }
 
-fn decode_debug_stick_state(d: &Dyn) -> DataResult<BTreeMap<Identifier, String>> {
+fn decode_debug_stick_state(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<BTreeMap<Identifier, String>> {
     let entries = match read_map(d) {
         DataResult::Success(m) => m,
         other => return other.map(|_| BTreeMap::new()),
@@ -1911,6 +2063,10 @@ fn decode_debug_stick_state(d: &Dyn) -> DataResult<BTreeMap<Identifier, String>>
                 continue;
             }
         };
+        if let Err(m) = check_registry_id(reg_ids::block(), &block_id, registries) {
+            errors.push(m);
+            continue;
+        }
         match read_string(v) {
             DataResult::Success(prop) => {
                 if !zenith_registry::is_valid_property_name(&prop) {
@@ -1930,14 +2086,21 @@ fn decode_debug_stick_state(d: &Dyn) -> DataResult<BTreeMap<Identifier, String>>
     }
 }
 
-fn decode_typed_entity_data(d: &Dyn) -> DataResult<TypedEntityData> {
+fn decode_typed_entity_data(
+    d: &Dyn,
+    registry: &Identifier,
+    registries: &dyn RegistryContext,
+) -> DataResult<TypedEntityData> {
     decode_compound_or_snbt(d).and_then(|mut c| {
         let Some(Tag::String(raw_id)) = c.remove("id") else {
             return DataResult::error("Entity/block-entity data must contain a string 'id'");
         };
         let id_str = raw_id.to_string_lossy();
         match Identifier::parse(&id_str) {
-            Ok(id) => DataResult::Success(TypedEntityData { id, payload: c }),
+            Ok(id) => match check_registry_id(registry, &id, registries) {
+                Ok(()) => DataResult::Success(TypedEntityData { id, payload: c }),
+                Err(m) => DataResult::error(m),
+            },
             Err(_) => DataResult::error(format!("Invalid entity/block-entity id: {id_str}")),
         }
     })
@@ -2076,9 +2239,14 @@ fn encode_fireworks(fw: &Fireworks) -> Dyn {
     b.build()
 }
 
-fn decode_banner_pattern_layer(d: &Dyn) -> DataResult<BannerPatternLayer> {
+fn decode_banner_pattern_layer(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<BannerPatternLayer> {
     let mut r = Rec::new(d);
-    let pattern = r.required("pattern", decode_holder_ref);
+    let pattern = r.required("pattern", |v| {
+        decode_holder_ref(v, reg_ids::banner_pattern(), registries)
+    });
     let color = r.required("color", decode_dye);
     r.finish(|| {
         Some(BannerPatternLayer {
@@ -2095,12 +2263,20 @@ fn encode_banner_pattern_layer(layer: &BannerPatternLayer) -> Dyn {
     b.build()
 }
 
-fn decode_pot_decorations(d: &Dyn) -> DataResult<PotDecorations> {
+fn decode_pot_decorations(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<PotDecorations> {
     let mut r = Rec::new(d);
-    let back = r.optional_opt("back", ItemTemplate::decode).map(Box::new);
-    let left = r.optional_opt("left", ItemTemplate::decode).map(Box::new);
-    let right = r.optional_opt("right", ItemTemplate::decode).map(Box::new);
-    let front = r.optional_opt("front", ItemTemplate::decode).map(Box::new);
+    let back = r
+        .optional_opt("back", |v| ItemTemplate::decode(v, registries))
+        .map(Box::new);
+    let left = r
+        .optional_opt("left", |v| ItemTemplate::decode(v, registries))
+        .map(Box::new);
+    let right = r
+        .optional_opt("right", |v| ItemTemplate::decode(v, registries))
+        .map(Box::new);
+    let front = r
+        .optional_opt("front", |v| ItemTemplate::decode(v, registries))
+        .map(Box::new);
     r.finish(|| {
         Some(PotDecorations {
             back,
@@ -2131,11 +2307,14 @@ fn encode_pot_decorations(pd: &PotDecorations) -> DataResult<Dyn> {
     DataResult::Success(b.build())
 }
 
-fn decode_container(d: &Dyn) -> DataResult<ItemContainerContents> {
+fn decode_container(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<ItemContainerContents> {
     decode_sized_list(d, 0, 256, |entry| {
         let mut r = Rec::new(entry);
         let slot = r.required("slot", |v| read_int_range(v, 0, 255).map(|n| n as u8));
-        let item = r.required("item", ItemTemplate::decode);
+        let item = r.required("item", |v| ItemTemplate::decode(v, registries));
         r.finish(|| Some((slot?, item?)))
     })
     .map(ItemContainerContents::from_entries)
@@ -2179,9 +2358,14 @@ fn decode_block_state(d: &Dyn) -> DataResult<BTreeMap<String, String>> {
     }
 }
 
-fn decode_beehive_occupant(d: &Dyn) -> DataResult<BeehiveOccupant> {
+fn decode_beehive_occupant(
+    d: &Dyn,
+    registries: &dyn RegistryContext,
+) -> DataResult<BeehiveOccupant> {
     let mut r = Rec::new(d);
-    let entity_data = r.required("entity_data", decode_typed_entity_data);
+    let entity_data = r.required("entity_data", |v| {
+        decode_typed_entity_data(v, reg_ids::entity_type(), registries)
+    });
     let ticks_in_hive = r.required("ticks_in_hive", read_int);
     let min_ticks_in_hive = r.required("min_ticks_in_hive", read_int);
     r.finish(|| {
@@ -2246,9 +2430,11 @@ fn decode_brewing_fuel(d: &Dyn) -> DataResult<BrewingFuel> {
     })
 }
 
-fn decode_mob_visibility(d: &Dyn) -> DataResult<MobVisibility> {
+fn decode_mob_visibility(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<MobVisibility> {
     let mut r = Rec::new(d);
-    let targeting_entity_types = r.required("targeting_entity_types", decode_holder_set);
+    let targeting_entity_types = r.required("targeting_entity_types", |v| {
+        decode_holder_set(v, reg_ids::entity_type(), registries)
+    });
     let visibility = r.required("visibility", |v| read_float_range(v, 0.0, 10.0));
     r.finish(|| {
         Some(MobVisibility {
@@ -2258,18 +2444,20 @@ fn decode_mob_visibility(d: &Dyn) -> DataResult<MobVisibility> {
     })
 }
 
-fn decode_four_components(d: &Dyn) -> DataResult<[Component; 4]> {
-    decode_sized_list(d, 4, 4, decode_component).and_then(|v| match <[Component; 4]>::try_from(v) {
-        Ok(arr) => DataResult::Success(arr),
-        Err(_) => DataResult::error("Expected exactly 4 sign message lines"),
+fn decode_four_components(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<[Component; 4]> {
+    decode_sized_list(d, 4, 4, |v| decode_component(v, registries)).and_then(|v| {
+        match <[Component; 4]>::try_from(v) {
+            Ok(arr) => DataResult::Success(arr),
+            Err(_) => DataResult::error("Expected exactly 4 sign message lines"),
+        }
     })
 }
 
-fn decode_sign_text(d: &Dyn) -> DataResult<SignText> {
+fn decode_sign_text(d: &Dyn, registries: &dyn RegistryContext) -> DataResult<SignText> {
     let mut r = Rec::new(d);
-    let messages = r.required("messages", decode_four_components);
+    let messages = r.required("messages", |v| decode_four_components(v, registries));
     let filtered_messages = r.lenient("filtered_messages", None, |v| {
-        decode_four_components(v).map(Some)
+        decode_four_components(v, registries).map(Some)
     });
     let color = r.optional("color", DyeColor::Black, decode_dye);
     let has_glowing_text = r.optional("has_glowing_text", false, read_bool);
