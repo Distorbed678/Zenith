@@ -439,8 +439,10 @@ pub fn snbt_format(version: &str, extra: &[PathBuf], write: bool) -> anyhow::Res
                 let ctx = |b: &[u8]| {
                     let window = &b[at.saturating_sub(80).min(b.len())..(at + 80).min(b.len())];
                     let units: Vec<u16> = window
-                        .chunks_exact(2)
-                        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|c| u16::from_be_bytes(*c))
                         .collect();
                     String::from_utf16_lossy(&units)
                 };
@@ -1123,6 +1125,8 @@ const MH_ENDS: [(f64, f64); 6] = [
     (3.0e7, 3.0e7 + 1.0),
 ];
 
+// 3.14159 is a deliberate probe input (it must match the Java list), not an approximation of π.
+#[allow(clippy::approx_constant)]
 fn mh_doubles() -> Vec<f64> {
     let mut v = vec![
         0.0,
