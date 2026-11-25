@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T23:57:48Z",
+  "generatedAt": "2026-11-25T00:05:16Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 1.0,
+    "percent": 1.4,
     "parityPercent": 0.0,
-    "milestonesDone": 0,
+    "milestonesDone": 1,
     "milestonesTotal": 33,
     "suitesPassing": 0,
     "suitesTotal": 31
@@ -18,7 +18,7 @@
       "id": "P0",
       "title": "Foundation",
       "blurb": "Repo, rules, plan, hygiene guard, ownership proof, tracker, website.",
-      "percent": 70.0,
+      "percent": 100.0,
       "weight": 2.0,
       "milestones": [
         "M0"
@@ -125,10 +125,10 @@
       "id": "M0",
       "phase": "P0",
       "title": "Foundation & tooling",
-      "status": "in-progress",
+      "status": "done",
       "weight": 2.0,
-      "percent": 70.0,
-      "tasksDone": 7,
+      "percent": 100.0,
+      "tasksDone": 10,
       "tasksTotal": 10,
       "tasks": [
         {
@@ -161,15 +161,15 @@
         },
         {
           "title": "Pixel-crafted design system (packages/ui)",
-          "done": false
+          "done": true
         },
         {
           "title": "Website v1 on GitHub Pages",
-          "done": false
+          "done": true
         },
         {
           "title": "Public GitHub repo + CI",
-          "done": false
+          "done": true
         }
       ],
       "suites": []
@@ -1348,6 +1348,11 @@
     {
       "date": "2026-11-24",
       "percent": 1.0,
+      "parityPercent": 0.0
+    },
+    {
+      "date": "2026-11-25",
+      "percent": 1.4,
       "parityPercent": 0.0
     }
   ]

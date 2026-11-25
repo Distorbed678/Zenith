@@ -63,7 +63,7 @@ id = "M0"
 phase = "P0"
 title = "Foundation & tooling"
 weight = 2
-status = "in-progress"
+status = "done"
 tasks = [
   { t = "Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)", done = true },
   { t = "Master plan written (docs/plan/00–13)", done = true },
@@ -72,9 +72,9 @@ tasks = [
   { t = "zenith-install: locate installs + local ownership proof", done = true },
   { t = "Asset/trademark/decompile guard (xtask + pre-commit + CI)", done = true },
   { t = "Tracker pipeline (milestones → progress.json → SVG)", done = true },
-  { t = "Pixel-crafted design system (packages/ui)", done = false },
-  { t = "Website v1 on GitHub Pages", done = false },
-  { t = "Public GitHub repo + CI", done = false },
+  { t = "Pixel-crafted design system (packages/ui)", done = true },
+  { t = "Website v1 on GitHub Pages", done = true },
+  { t = "Public GitHub repo + CI", done = true },
 ]
 
 # ───────────────────────────── P1 ─────────────────────────────
