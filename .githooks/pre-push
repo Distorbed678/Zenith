@@ -1,5 +1,14 @@
 #!/bin/sh
-# Zenith pre-push: run the same fmt + clippy gate as CI, so a red CI is caught before it leaves the machine.
+# Zenith pre-push: run CI's exact fmt + clippy gate on the commit being pushed (HEAD), inside a temporary detached
+# worktree. Other agents may have work in progress in this shared checkout; this hook never reads, stashes or
+# modifies it. A persistent target dir keeps repeat runs fast.
 set -e
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/zenith-prepush.XXXXXX")
+cleanup() { git worktree remove --force "$tmp" >/dev/null 2>&1 || rm -rf "$tmp"; git worktree prune >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+git worktree add --detach --quiet "$tmp" HEAD
+cd "$tmp"
+export CARGO_TARGET_DIR="${ZENITH_HOOK_TARGET:-$HOME/.cache/zenith/hook-target}"
 cargo fmt --all --check
 RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -q
+echo "pre-push: fmt + clippy clean on $(git rev-parse --short HEAD)"
