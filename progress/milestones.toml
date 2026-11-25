@@ -163,10 +163,10 @@ weight = 2
 status = "in-progress"
 suites = ["rng-streams", "noise-samples"]
 tasks = [
-  { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = false },
+  { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = true },
   { t = "Java-exact float/double math helpers (sin table, floor, lerp…)", done = false },
   { t = "Improved/Perlin, Simplex, Blended and Normal noise", done = false },
-  { t = "Seed hashing identical to vanilla", done = false },
+  { t = "Seed hashing identical to vanilla", done = true },
 ]
 
 [[milestone]]

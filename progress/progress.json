@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T00:54:30Z",
+  "generatedAt": "2026-11-25T00:58:29Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 5.2,
+    "percent": 5.5,
     "parityPercent": 9.7,
     "milestonesDone": 2,
     "milestonesTotal": 33,
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 0.0,
+      "percent": 0.9,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -410,13 +410,13 @@
       "title": "Math, RNG & noise primitives",
       "status": "in-progress",
       "weight": 2.0,
-      "percent": 0.0,
-      "tasksDone": 0,
+      "percent": 25.0,
+      "tasksDone": 2,
       "tasksTotal": 4,
       "tasks": [
         {
           "title": "Java LCG Random + Xoroshiro128++ + positional factories",
-          "done": false
+          "done": true
         },
         {
           "title": "Java-exact float/double math helpers (sin table, floor, lerp…)",
@@ -428,7 +428,7 @@
         },
         {
           "title": "Seed hashing identical to vanilla",
-          "done": false
+          "done": true
         }
       ],
       "suites": [
@@ -1352,7 +1352,7 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 5.2,
+      "percent": 5.5,
       "parityPercent": 9.7
     }
   ]

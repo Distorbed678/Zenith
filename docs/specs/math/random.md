@@ -36,9 +36,11 @@ arithmetic shift and `>>>` a logical shift. Floats are IEEE-754.
   - `nextLong()` = (next(32) << 32) + next(32), where the **second value is sign-extended before the add**.
   - `nextBoolean()` = next(1) ≠ 0.
   - `nextFloat()` = next(24) × F, where F is the single-precision constant written 5.9604645e-8 (exactly 2⁻²⁴).
-  - `nextDouble()` = ((next(26) << 27) + next(27)) × D, where **D is the single-precision constant written
-    1.110223e-16, widened to double**. D is *not* exactly 2⁻⁵³. Using 2⁻⁵³ (as `java.util.Random` does) gives
-    different low bits. This is a key parity edge case.
+  - `nextDouble()` = ((next(26) << 27) + next(27)) × D, where D is the single-precision constant written
+    1.110223e-16, widened to double. That float rounds to **exactly 2⁻⁵³**, so D = 2⁻⁵³ and the result equals
+    `java.util.Random`'s. Implement D as the widened float literal anyway, so the value's origin stays obvious.
+    *(Correction 2026-11-25: an earlier revision of this spec claimed D ≠ 2⁻⁵³. That was a reader arithmetic error,
+    caught by the implementer's open question and confirmed numerically.)*
 - `fork()` = new legacy source seeded with this.nextLong().
 - Positional factory (seeded with one 64-bit value P, from this.nextLong()):
   - at(x, y, z) → legacy source seeded with h(x, y, z) ⊕ P;
@@ -59,7 +61,7 @@ arithmetic shift and `>>>` a logical shift. Floats are IEEE-754.
     t = (2³² − bound) mod bound (unsigned), and while frac < t redraw u and recompute p and frac. Result = p >> 32.
   - `nextBoolean()` = lowest bit of a step.
   - `nextFloat()` = (step >>> 40) × F (the top 24 bits).
-  - `nextDouble()` = (step >>> 11) × D (the top 53 bits; same D quirk as above).
+  - `nextDouble()` = (step >>> 11) × D (the top 53 bits; D = 2⁻⁵³ as above).
   - `consumeCount(n)` = n steps, results discarded.
 - `fork()` = new xoroshiro source from (nextLong(), nextLong()), in that order.
 - Positional factory (seeded with (L, H) = (nextLong(), nextLong())):
@@ -77,8 +79,22 @@ first. Setting the seed clears the cache.
   platform differs, record it as a per-platform quirk.
 
 ## Edge cases to test (oracle `rng-streams`)
-1. `nextDouble` low bits vs a 2⁻⁵³ implementation (must differ where the float constant matters).
+1. `nextDouble` equals top-bits × 2⁻⁵³ exactly (D is the widened float constant, which is exactly 2⁻⁵³).
 2. Position hash with large |x| (32-bit wrap), negative coordinates, and y extremes.
 3. `nextInt(bound)` for powers of two, bound = 1, bound = 2³¹ − 1, and bounds that force rejection loops.
 4. Xoroshiro all-zero seed replacement; positional `fromSeed` with s = 0.
 5. Gaussian cache behavior across `setSeed`, and names with non-ASCII characters (MD5 over UTF-8).
+
+## Open questions
+- **Constant `D` exact IEEE-754 bit pattern:** The spec states both that `D` is "the single-precision constant written 1.110223e-16, widened to double" AND that "`D` is *not* exactly 2⁻⁵³" (causing different low bits from `java.util.Random`). However, in IEEE-754 binary32, `2⁻⁵³` is exact (`0x25000000`), and `1.110223e-16` is within `0.37` binary32 ULPs of `2⁻⁵³` (`Float.toString((float) 0x1.0p-53)` is `"1.110223E-16"`). Consequently `(double) 1.110223E-16F` is bit-identical to `2⁻⁵³` (`0x3CA0000000000000`), whereas the **double-precision** literal `1.110223E-16D` is `0x3C9FFFFFF4178DA3` (`!= 2⁻⁵³`). Please verify the exact constant-pool entry (`Float` `0x25000000` + `f2d` == `2⁻⁵³`, vs `Double` `0x3C9FFFFFF4178DA3`, vs another literal) in the reference bytecode / oracle. Implemented conservatively as `1.110223e-16_f64` (`0x3C9FFFFFF4178DA3`) so `D != 2⁻⁵³` and Edge Case 1 hold until confirmed.
+- `LegacyRandom::consumeCount(n)`: `consumeCount(n)` is specified for Xoroshiro (`n` steps), but not explicitly listed under Legacy. Implemented conservatively as `n` calls to `nextInt()` (1 LCG step per count, matching Xoroshiro's 1 step per count, without clearing the Gaussian cache). Confirm whether vanilla's `LegacyRandomSource` inherits `RandomSource.consumeCount` as `n` calls to `nextInt()`.
+- `XoroshiroPositionalRandomFactory` zero base state: if a positional factory is ever constructed directly with `(L, H) = (0, 0)`, does the factory itself keep `(0, 0)` and rely on `XoroshiroRandom` construction to apply `(0, 0) -> (G, S)` (our conservative choice), or does the factory normalize `(0, 0)` at factory construction?
+
+
+## Answers from the reader (2026-11-25)
+- **Q1 (D):** the implementer is right. The float literal rounds to exactly 2⁻⁵³, so D = 2⁻⁵³ (`0x3CA0000000000000`).
+  The spec text above has been corrected.
+- **Q2 (legacy `consumeCount`):** n × `nextInt()`, i.e. n LCG steps, and the Gaussian cache is untouched. (This is the
+  shared default for every source; xoroshiro's own version does n raw steps.)
+- **Q3 (positional factory zero state):** the factory stores (L, H) as given. The all-zero replacement happens only when
+  a generator is constructed, so `at`/`fromSeed` results that come out as (0, 0) become (G, S) at that point.
