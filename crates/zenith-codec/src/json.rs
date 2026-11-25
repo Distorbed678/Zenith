@@ -9,11 +9,11 @@
 use std::collections::HashMap;
 use std::fmt;
 
-/// Maximum nesting depth the parser accepts before reporting an error.
+/// Maximum number of nested containers (arrays/objects). Opening one more is a parse error.
 ///
-/// The game has no explicit limit (very deep input exhausts its stack, which is a crash and not replicated).
-/// Zenith reports a normal parse error instead of overflowing its own stack.
-pub const MAX_DEPTH: usize = 1024;
+/// Verified with the oracle (datapack-load, 2026-11-25): the game's bundled JSON library accepts 255 nested arrays and
+/// rejects 256. Plain values inside the deepest container are fine; only opening a container is counted.
+pub const MAX_DEPTH: usize = 255;
 
 /// Which token rules apply to the document (spec §7.1, right-hand column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,7 +65,8 @@ impl fmt::Display for NumberError {
 
 impl std::error::Error for NumberError {}
 
-/// Largest decimal exponent magnitude an integer read accepts (spec §7.2 / Open question 6).
+/// Integer reads reject a decimal exponent whose magnitude is at least this (oracle-verified 2026-11-25: `1e10000`
+/// is rejected by the game's primitive codecs; spec §7.2).
 pub const MAX_INT_EXPONENT: i128 = 10_000;
 
 impl JsonNumber {
@@ -108,7 +109,7 @@ impl JsonNumber {
             }
             None => (t, 0),
         };
-        if exp.abs() > MAX_INT_EXPONENT {
+        if exp.abs() >= MAX_INT_EXPONENT {
             return Err(NumberError::ExponentOutOfRange);
         }
         let (int_part, frac_part) = match mantissa.find('.') {
@@ -453,12 +454,12 @@ impl Parser<'_> {
     }
 
     fn parse_value(&mut self, depth: usize) -> Result<Json, JsonError> {
-        if depth > MAX_DEPTH {
-            return Err(self.err("nesting too deep"));
-        }
         let Some(&b) = self.src.get(self.pos) else {
             return Err(self.err("unexpected end of input"));
         };
+        if matches!(b, b'[' | b'{') && depth >= MAX_DEPTH {
+            return Err(self.err("nesting too deep"));
+        }
         match b {
             b'{' => self.parse_object(depth),
             b'[' => self.parse_array(depth),

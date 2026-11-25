@@ -1410,3 +1410,329 @@ pub fn math_helpers(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     Ok(passed == total)
 }
+
+// ── datapack-load, stage 1: the JSON layer ───────────────────────────────────
+
+/// Canonical tree dump in UTF-16 units; must match `JsonCheck.canonical` (string lengths are UTF-16 lengths).
+fn json_canonical(j: &zenith_codec::json::Json, out: &mut Vec<u16>) {
+    use zenith_codec::json::Json;
+    let push = |out: &mut Vec<u16>, s: &str| out.extend(s.encode_utf16());
+    let push_string = |out: &mut Vec<u16>, s: &str| {
+        let units: Vec<u16> = s.encode_utf16().collect();
+        out.push(u16::from(b's'));
+        out.extend(units.len().to_string().encode_utf16());
+        out.push(u16::from(b':'));
+        out.extend(units);
+    };
+    match j {
+        Json::Null => push(out, "n"),
+        Json::Bool(b) => push(out, if *b { "t" } else { "f" }),
+        Json::Number(n) => {
+            push(out, "#");
+            push(out, n.text());
+            push(out, ";");
+        }
+        Json::String(s) => push_string(out, s),
+        Json::Array(items) => {
+            push(out, "[");
+            for item in items {
+                json_canonical(item, out);
+                push(out, ",");
+            }
+            push(out, "]");
+        }
+        Json::Object(obj) => {
+            push(out, "{");
+            for (k, v) in obj.iter() {
+                push_string(out, k);
+                push(out, "=");
+                json_canonical(v, out);
+                push(out, ";");
+            }
+            push(out, "}");
+        }
+    }
+}
+
+/// Hand-made JSON edge cases (our own data).
+fn json_synthetic() -> Vec<String> {
+    let mut v: Vec<String> = [
+        "\u{feff}{\"a\":1}",
+        "{\"a\":1,\"a\":2}",
+        "{\"a\":1}//c",
+        "{\"a\":1} x",
+        "{\"a\":1,}",
+        "[1,2,]",
+        "NaN",
+        "[NaN]",
+        "01",
+        "[01]",
+        "\"a\tb\"",
+        "\"\\'\"",
+        "",
+        "   ",
+        "null",
+        "[1e20, 1.9, -0.0, 3000000000]",
+        "{\"k\":\"\\ud800\"}",
+        "{\"k\":\"\\uD83D\\uDE00\"}",
+        "{a:1}",
+        "{'a':1}",
+        "[true,false,null]",
+        "\"\\u0000\"",
+        "1e10000",
+        "[1e-400]",
+        "{\"z\":1,\"a\":2,\"m\":3}",
+        "TRUE",
+        "True",
+        "nul",
+        "1.",
+        ".5",
+        "-",
+        "+1",
+        "0x10",
+        "1e",
+        "\"open",
+        "[1 2]",
+        "{\"a\" 1}",
+        "{\"a\":1}{\"b\":2}",
+        "/*c*/{\"a\":1}",
+        "\"\\x41\"",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect();
+    for depth in [255, 256, 300] {
+        v.push(format!("{}{}", "[".repeat(depth), "]".repeat(depth)));
+    }
+    v
+}
+
+const JSON_NUMBER_TEXTS: [&str; 30] = [
+    "0",
+    "1",
+    "-1",
+    "1.9",
+    "-1.9",
+    "3000000000",
+    "-3000000000",
+    "1e20",
+    "300",
+    "-129",
+    "127",
+    "1.5e3",
+    "0.1",
+    "1e-400",
+    "1e400",
+    "9223372036854775807",
+    "9223372036854775808",
+    "-0.0",
+    "2.5",
+    "1e10000",
+    "123456789012345678901234567890",
+    "4.9e-324",
+    "3.4028235e38",
+    "3.5e38",
+    "65536",
+    "32768",
+    "true",
+    "false",
+    "\"5\"",
+    "-2147483649",
+];
+
+fn run_json_check(version: &str, inputs: &[Vec<u8>], mode: &str) -> anyhow::Result<Vec<u8>> {
+    let (install, java) = crate::oracle::install_and_java(version)?;
+    let agent = crate::oracle::build(version)?;
+    let mut cp = zenith_install::libraries::game_classpath(&install)?;
+    cp.push(agent);
+    let dir = zenith_install::cache_dir().join("parity/datapack-load");
+    fs::create_dir_all(&dir)?;
+    let (corpus, results) = (
+        dir.join(format!("{mode}.in")),
+        dir.join(format!("{mode}.out")),
+    );
+    let mut buf = Vec::new();
+    for i in inputs {
+        buf.extend_from_slice(&u32::try_from(i.len())?.to_be_bytes());
+        buf.extend_from_slice(i);
+    }
+    fs::write(&corpus, buf)?;
+    let out = std::process::Command::new(&java.java)
+        .arg("-cp")
+        .arg(zenith_install::libraries::join_classpath(&cp))
+        .arg("dev.zenith.oracle.JsonCheck")
+        .arg(&corpus)
+        .arg(&results)
+        .arg(mode)
+        .output()
+        .context("run vanilla json check")?;
+    anyhow::ensure!(
+        out.status.success(),
+        "vanilla json check failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let raw = fs::read(&results)?;
+    let _ = fs::remove_file(&corpus); // may contain game data
+    let _ = fs::remove_file(&results);
+    Ok(raw)
+}
+
+/// Parse a `tree`/`lenient` results stream into Option<UTF-16 dump> per input.
+fn parse_tree_results(raw: &[u8], n: usize) -> anyhow::Result<Vec<Option<Vec<u16>>>> {
+    let (mut at, mut out) = (0usize, Vec::with_capacity(n));
+    while at < raw.len() {
+        let status = raw[at];
+        at += 1;
+        if status != 0 {
+            out.push(None);
+            continue;
+        }
+        let units = u32::from_be_bytes(raw[at..at + 4].try_into()?) as usize;
+        at += 4;
+        let dump: Vec<u16> = raw[at..at + units * 2]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_be_bytes(*c))
+            .collect();
+        at += units * 2;
+        out.push(Some(dump));
+    }
+    anyhow::ensure!(
+        out.len() == n,
+        "vanilla returned {} results for {n} inputs",
+        out.len()
+    );
+    Ok(out)
+}
+
+/// `datapack-load` (stage 1): Zenith's JSON layer must parse exactly like the game's parsers (every JSON file in the
+/// user's jar + hand-made edge cases), and number reads must equal the game's bundled primitive codecs. Later stages
+/// add typed decoding of every data registry as those milestones land.
+pub fn datapack_load(version: &str, write: bool) -> anyhow::Result<bool> {
+    use zenith_codec::json::{Json, ParseMode, parse_bytes};
+    let mut failures: Vec<String> = Vec::new();
+    let (mut passed, mut total) = (0u64, 0u64);
+
+    // Corpus: every .json in the user's jar (read at run time, never stored) + synthetic cases.
+    let install = zenith_install::discover_installs(Some(version))
+        .into_iter()
+        .next()
+        .context("no install")?;
+    let mut zip = zip::ZipArchive::new(fs::File::open(&install.client_jar)?)?;
+    let names: Vec<String> = zip
+        .file_names()
+        .filter(|n| (n.starts_with("data/") || n.starts_with("assets/")) && n.ends_with(".json"))
+        .map(str::to_owned)
+        .collect();
+    let mut labels: Vec<String> = Vec::new();
+    let mut inputs: Vec<Vec<u8>> = Vec::new();
+    for n in &names {
+        let mut b = Vec::new();
+        zip.by_name(n)?.read_to_end(&mut b)?;
+        labels.push(format!("jar:{n}"));
+        inputs.push(b);
+    }
+    let jar_count = inputs.len();
+    for (i, s) in json_synthetic().into_iter().enumerate() {
+        labels.push(format!(
+            "synthetic#{i}: {}",
+            s.chars().take(30).collect::<String>()
+        ));
+        inputs.push(s.into_bytes());
+    }
+
+    for (mode, zmode) in [("tree", ParseMode::Data), ("metadata", ParseMode::Metadata)] {
+        // Metadata parsing (pack.mcmeta / .mcmeta read path) is only compared on the synthetic cases.
+        let range = if mode == "tree" {
+            0..inputs.len()
+        } else {
+            jar_count..inputs.len()
+        };
+        let vanilla = parse_tree_results(
+            &run_json_check(version, &inputs[range.clone()], mode)?,
+            range.len(),
+        )?;
+        for (i, v) in range.zip(vanilla) {
+            let ours = parse_bytes(&inputs[i], zmode).ok().map(|j| {
+                let mut out = Vec::new();
+                json_canonical(&j, &mut out);
+                out
+            });
+            total += 1;
+            if ours == v {
+                passed += 1;
+            } else if failures.len() < 15 {
+                let show = |d: &Option<Vec<u16>>| {
+                    d.as_ref().map_or("<rejected>".to_owned(), |u| {
+                        String::from_utf16_lossy(&u[..u.len().min(60)])
+                    })
+                };
+                failures.push(format!(
+                    "{mode} {}: vanilla {} | zenith {}",
+                    labels[i],
+                    show(&v),
+                    show(&ours)
+                ));
+            }
+        }
+    }
+
+    // Number reads through the primitive codecs.
+    let texts: Vec<Vec<u8>> = JSON_NUMBER_TEXTS
+        .iter()
+        .map(|t| t.as_bytes().to_vec())
+        .collect();
+    let raw = run_json_check(version, &texts, "numbers")?;
+    anyhow::ensure!(
+        raw.len() == texts.len() * 6 * 9,
+        "unexpected numbers output size"
+    );
+    for (ti, text) in JSON_NUMBER_TEXTS.iter().enumerate() {
+        let parsed = parse_bytes(text.as_bytes(), ParseMode::Data).ok();
+        let num = match &parsed {
+            Some(Json::Number(n)) => Some(n),
+            _ => None,
+        };
+        let ours: [Option<u64>; 6] = [
+            num.and_then(|n| n.to_i8().ok())
+                .map(|v| i64::from(v) as u64),
+            num.and_then(|n| n.to_i16().ok())
+                .map(|v| i64::from(v) as u64),
+            num.and_then(|n| n.to_i32().ok())
+                .map(|v| i64::from(v) as u64),
+            num.and_then(|n| n.to_i64().ok()).map(|v| v as u64),
+            num.map(|n| i64::from(n.to_f32().to_bits() as i32) as u64),
+            num.map(|n| n.to_f64().to_bits()),
+        ];
+        for (ci, (codec, z)) in ["byte", "short", "int", "long", "float", "double"]
+            .iter()
+            .zip(ours)
+            .enumerate()
+        {
+            let at = (ti * 6 + ci) * 9;
+            let v = (raw[at] == 0)
+                .then(|| u64::from_be_bytes(raw[at + 1..at + 9].try_into().expect("8 bytes")));
+            total += 1;
+            if v == z {
+                passed += 1;
+            } else if failures.len() < 30 {
+                failures.push(format!(
+                    "number {text} as {codec}: vanilla {v:?} | zenith {z:?}"
+                ));
+            }
+        }
+    }
+
+    println!(
+        "datapack-load {version} (stage 1, JSON layer): {passed}/{total} identical ({jar_count} jar JSON files + synthetic cases, number reads)"
+    );
+    for f in &failures {
+        println!("  FAIL {f}");
+    }
+    if write {
+        SuiteResult::new("datapack-load", version, passed, total)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(passed == total)
+}

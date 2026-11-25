@@ -1571,6 +1571,7 @@ dependencies = [
  "sha1",
  "toml",
  "ureq",
+ "zenith-codec",
  "zenith-data",
  "zenith-install",
  "zenith-math",
@@ -1619,6 +1620,16 @@ dependencies = [
  "zenith-nbt",
  "zenith-registry",
  "zip",
+]
+
+[[package]]
+name = "zenith-components"
+version = "0.0.1"
+dependencies = [
+ "zenith-codec",
+ "zenith-data",
+ "zenith-nbt",
+ "zenith-registry",
 ]
 
 [[package]]

@@ -25,6 +25,7 @@ zenith-math = { path = "../crates/zenith-math" }
 zenith-data = { path = "../crates/zenith-data" }
 zenith-registry = { path = "../crates/zenith-registry" }
 zenith-storage = { path = "../crates/zenith-storage" }
+zenith-codec = { path = "../crates/zenith-codec" }
 flate2.workspace = true
 libz-sys.workspace = true
 

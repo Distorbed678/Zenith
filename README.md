@@ -54,7 +54,7 @@ Repo, rules, plan, hygiene guard, ownership proof, tracker, website.
 |---|---|---|---|---|
 | **M0** Foundation & tooling | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Owner Q&A rounds logged (docs/decisions/USER-ANSWERS.md)<br>☑ Master plan written (docs/plan/00–13)<br>☑ ADRs for the founding decisions<br>☑ Cargo workspace + pinned toolchain<br>☑ zenith-install: locate installs + local ownership proof<br>☑ Asset/trademark/decompile guard (xtask + pre-commit + CI)<br>☑ Tracker pipeline (milestones → progress.json → SVG)<br>☑ Pixel-crafted design system (packages/ui)<br>☑ Website v1 on GitHub Pages<br>☑ Public GitHub repo + CI | — |
 
-#### P1 Core data: 64.4%
+#### P1 Core data: 71.8%
 
 Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 
@@ -64,7 +64,7 @@ Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 | **M2** NBT & SNBT | 🟡 In progress | `▰▰▰▰▰▰▰▰▱▱` 80% | ☑ Binary NBT read/write (file + network variants)<br>☐ Modified UTF-8 + depth/size limits identical to vanilla<br>☐ SNBT parser + printer (vanilla formatting)<br>☑ Fuzz targets (cargo-fuzz)<br>☑ Round-trip every NBT blob in vanilla-generated worlds | `nbt-roundtrip` 32515/32515<br>`snbt-format` 32515/32515 |
 | **M3** Saves: region files & level data | 🟡 In progress | `▰▰▰▰▰▰▰▰▰▱` 90% | ☑ Anvil .mca read/write (zlib/gzip/lz4/none, external .mcc)<br>☑ level.dat, playerdata, entities/ and poi/ region files<br>☑ Session lock + atomic save semantics<br>☐ io_uring backend on Linux (opt-in internal, same bytes)<br>☑ Vanilla opens Zenith-saved worlds without fixups (oracle check) | `anvil-io` 7779/7779 |
 | **M4** Registries, identifiers & tags | 🟡 In progress | `▰▰▰▰▰▰▱▱▱▱` 55% | ☑ Identifier type + validation rules<br>☐ Static + dynamic registries with vanilla numeric IDs<br>☑ Block states & properties with identical global state IDs<br>☐ Tag loading + resolution order<br>☑ Feature flags | `registry-ids` 0/0<br>`blockstate-ids` 35723/35723 |
-| **M5** Codecs, data packs & text components | 🟡 In progress | `▰▰▱▱▱▱▱▱▱▱` 20% | ☑ Codec framework (decode/encode, lenient/strict, error messages)<br>☑ Data pack discovery, overlays, pack.mcmeta version ranges<br>☐ All vanilla data registries parse from the user's jar<br>☐ Text components (JSON + NBT forms), styles, translation<br>☐ Data components (item component system) | `datapack-load` 0/0<br>`text-component` 0/0 |
+| **M5** Codecs, data packs & text components | 🟡 In progress | `▰▰▰▰▰▱▱▱▱▱` 45% | ☑ Codec framework (decode/encode, lenient/strict, error messages)<br>☑ Data pack discovery, overlays, pack.mcmeta version ranges<br>☐ All vanilla data registries parse from the user's jar<br>☐ Text components (JSON + NBT forms), styles, translation<br>☐ Data components (item component system) | `datapack-load` 15962/15964<br>`text-component` 0/0 |
 
 #### P2 World simulation: 3.6%
 

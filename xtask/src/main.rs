@@ -55,6 +55,13 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// Stage 1: Zenith's JSON layer vs the game's parsers (jar JSON + edge cases) and primitive codecs.
+    DatapackLoad {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Compare zenith-math's Java-exact helpers with the game's own on a fixed probe list.
     MathHelpers {
         #[arg(long, default_value = "26.3")]
@@ -153,6 +160,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::DatapackLoad { version, write },
+        } => parity::datapack_load(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::MathHelpers { version, write },
         } => parity::math_helpers(&version, write),

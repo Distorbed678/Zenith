@@ -872,3 +872,17 @@ are not in the repo. Engineering decisions for the open questions:
   matches per platform.
 - **Overlay `..` escape:** owner decision 11.1: **not replicated.** The overlay is refused with a warning (security
   deviation #1 in `docs/security-deviations.md`). Everything else about overlays is replicated exactly.
+
+## Parity status (2026-11-25): `datapack-load`, stage 1 (JSON layer)
+**15,962/15,964**: all 15,698 JSON files in the 26.3 jar parse to identical trees (number text, key order, duplicate
+keys), and so do the synthetic edge cases and every primitive number read through the game's bundled codecs. Facts
+settled by the oracle on the way:
+- **Nesting:** opening a 256th nested container fails; 255 is accepted. Only containers count.
+- **Exponents:** integer reads reject `|exponent| ≥ 10000`.
+- **No coercion:** `true`, `false` and `"5"` are not numbers.
+- **`pack.mcmeta` and `.mcmeta` sidecars** are read with a parser that requires a JSON *object* root and ignores
+  trailing content. This is not the game's separate lenient parser, which accepts comments, `NaN`, leading zeros and
+  trailing commas.
+- **Open gap (2):** a JSON string escape for an unpaired surrogate (e.g. `"\ud800"`) keeps the raw unit in the game.
+  Zenith's JSON strings are Rust `String`s and hold U+FFFD instead. Fix: store JSON strings as lossless UTF-16-capable
+  strings (tracked for M5).

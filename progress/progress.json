@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T04:26:08Z",
+  "generatedAt": "2026-11-25T08:31:17Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 10.2,
-    "parityPercent": 25.0,
+    "percent": 11.1,
+    "parityPercent": 28.1,
     "milestonesDone": 3,
     "milestonesTotal": 33,
     "suitesPassing": 8,
@@ -28,7 +28,7 @@
       "id": "P1",
       "title": "Core data",
       "blurb": "Parity harness, NBT, saves, registries, codecs, data packs. All headless.",
-      "percent": 64.4,
+      "percent": 71.8,
       "weight": 17.0,
       "milestones": [
         "M1",
@@ -362,7 +362,7 @@
       "title": "Codecs, data packs & text components",
       "status": "in-progress",
       "weight": 5.0,
-      "percent": 20.0,
+      "percent": 45.0,
       "tasksDone": 2,
       "tasksTotal": 5,
       "tasks": [
@@ -390,10 +390,10 @@
       "suites": [
         {
           "id": "datapack-load",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 15962,
+          "total": 15964,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
         },
         {
           "id": "text-component",
@@ -1359,8 +1359,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 10.2,
-      "parityPercent": 25.0
+      "percent": 11.1,
+      "parityPercent": 28.1
     }
   ]
 }

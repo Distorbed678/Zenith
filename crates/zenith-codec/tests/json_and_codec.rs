@@ -227,9 +227,12 @@ fn edge_03_absurd_exponents_are_a_hard_failure_not_a_decode_error() {
             other => panic!("{text}: expected hard failure, got {other:?}"),
         }
     }
-    // The limit is inclusive of 10000.
-    assert_eq!(int("1e10000").success(), Some(0));
-    assert_eq!(int("1e-10000").success(), Some(0));
+    // An exponent magnitude of 10000 is already rejected (oracle-verified, datapack-load 2026-11-25); 9999 is not.
+    for text in ["1e10000", "1e-10000"] {
+        assert!(matches!(int(text), DataResult::Failure(_)), "{text}");
+    }
+    assert_eq!(int("1e9999").success(), Some(0));
+    assert_eq!(int("1e-9999").success(), Some(0));
     // Floats never throw.
     assert!(FloatCodec.decode(&j("1e99999999999999999999")).is_success());
     // The hard failure aborts record decoding immediately and propagates.
