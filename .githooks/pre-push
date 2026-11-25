@@ -1,0 +1,5 @@
+#!/bin/sh
+# Zenith pre-push: run the same fmt + clippy gate as CI, so a red CI is caught before it leaves the machine.
+set -e
+cargo fmt --all --check
+RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets -q

@@ -11,7 +11,8 @@ updates are reviewed manually.)
   `CHANGELOG.md` and the version bumps, and drafts GitHub Releases.
 - **ADRs** in `docs/adr/NNNN-title.md` for every significant decision (template in `docs/adr/0000-template.md`).
 - Git hooks in `.githooks/` (enable with `git config core.hooksPath .githooks`):
-  `pre-commit` → `cargo xtask guard --staged`, plus `cargo xtask progress` when `progress/` is staged.
+  `pre-commit` → `cargo xtask guard --staged`, plus `cargo xtask progress` when `progress/` is staged;
+  `pre-push` → the same `cargo fmt --check` + `clippy -D warnings` gate CI runs.
 
 ## CI workflows (`.github/workflows/`)
 
