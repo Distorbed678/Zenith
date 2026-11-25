@@ -16,7 +16,7 @@ The full plan lives in `docs/plan/` (start at `docs/plan/00-OVERVIEW.md`). Every
 2. **Subagents.** Use subagents when they help, with the right model for the task. In T3 Code, Gemini subagents can be
    started with `delegate_task` (provider `antigravity`, model **`gemini-4-neon`**). The owner allows **Gemini 4 Neon only**
    (never another Gemini model). The owner considers it as capable as Opus 5.5, so use it to save Claude usage on large,
-   self-contained work. Keep architecture and cross-cutting decisions in the main thread.
+   self-contained work. Keep architecture and cross-cutting decisions in the main thread. If a Gemini 4 Neon delegate stops on the quota, retry Gemini once; if it is still out, use Claude subagents instead of waiting (USER-ANSWERS 12.1).
 3. **Cadence: fully autonomous.** Work milestone after milestone (`docs/plan/11-ROADMAP.md`). Stop only when blocked on a
    decision that belongs to the owner. Update the tracker (`progress/milestones.toml` → `cargo xtask progress`) whenever a
    milestone moves.

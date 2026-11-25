@@ -134,3 +134,9 @@ Answers are quoted or paraphrased faithfully. Where an answer changed an earlier
 |---|----------|-----------------|--------|
 | 11.1 | Vanilla has non-gameplay security weaknesses (e.g. a data-pack overlay named `..` can read files outside the pack). Replicate or fix? | Fix + warn; replicate exactly; case by case | **Fix them and log a warning.** Normal packs behave exactly like vanilla; only malicious/broken input differs. Every such fix is listed in `docs/security-deviations.md`. |
 | S.7 | (2026-11-25) Gemini usage is back: the temporary "use Claude for subagents" instruction was removed at the owner's request; S.3 (Gemini 4 Neon only, to save Claude usage) applies again. | CLAUDE.md rule 2 + memory |
+
+## Round 12 — 2026-11-25 — Subagents when the Gemini quota runs out
+
+| # | Question | Options offered | Answer |
+|---|----------|-----------------|--------|
+| 12.1 | The Gemini 4 Neon quota ran out mid-M7 (two delegates stopped). How to continue? | Claude subagents now; wait for the reset; Claude until the reset, then Gemini | **"It should be back now; if it's not, just use Claude subagents."** Rule: retry Gemini 4 Neon first; if it is still out of quota, use Claude subagents instead of waiting. |
