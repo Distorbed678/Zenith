@@ -99,7 +99,7 @@ id = "M2"
 phase = "P1"
 title = "NBT & SNBT"
 weight = 2
-status = "planned"
+status = "in-progress"
 suites = ["nbt-roundtrip", "snbt-format"]
 tasks = [
   { t = "Binary NBT read/write (file + network variants)", done = false },
@@ -160,7 +160,7 @@ id = "M6"
 phase = "P2"
 title = "Math, RNG & noise primitives"
 weight = 2
-status = "planned"
+status = "in-progress"
 suites = ["rng-streams", "noise-samples"]
 tasks = [
   { t = "Java LCG Random + Xoroshiro128++ + positional factories", done = false },
