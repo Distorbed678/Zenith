@@ -9,9 +9,13 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+thiserror.workspace = true
 zenith-codec = { path = "../zenith-codec" }
 zenith-math = { path = "../zenith-math" }
 zenith-registry = { path = "../zenith-registry" }
+
+[dev-dependencies]
+zenith-install = { path = "../zenith-install" }
 
 [lints]
 workspace = true

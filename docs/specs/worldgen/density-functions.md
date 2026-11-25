@@ -886,9 +886,17 @@ A black-box Java parity agent/probe for `golden-terrain` should dump outputs at 
 2. **[oracle] JVM `Math.log` / `Math.pow` / `Math.sin` / `Math.cos` intrinsic parity**: `UnaryFunction(LOG)`, `PowFunction`, `Beardifier` (`BEARD_KERNEL` via `Math.pow(Math.E, ...)`), and `NoiseSpawnFinder` (`Math.sin`/`Math.cos`) call `java.lang.Math` rather than `StrictMath`. Probe: dump all 13,824 `f32` bits of `Beardifier.BEARD_KERNEL` and sample `PowFunction` / `LogSampler` at 1,000 non-dyadic `f32` inputs on each CI host architecture $\to$ observe whether HotSpot intrinsics match Rust `f64::powf`/`ln`/`sin`/`cos` (or fdlibm) bit-for-bit.
 3. **[oracle] `NoiseSpawnFinder` tie-breaking and `Math.sin`/`Math.cos` coordinates**: `NoiseSpawnFinder.radialSearch` computes `(int)(Math.sin(angle) * radius)` with `f32` `angle` widened to `f64` and `angle += radiusIncrement / radius` in `f32`, comparing `angle > Math.PI * 2` in `f64`. Probe: run `NoiseBasedChunkGenerator.getOrigin(RandomState)` across 20 Overworld seeds $\to$ observe the resulting `ChunkPos` and confirm exact match against `NoiseSpawnFinder`.
 4. **[oracle] `CubicSpline` unsorted JSON points**: `CubicSpline.Multipoint.codec` does not reject unsorted `locations` on JSON decode, whereas `Builder` does. Probe: decode a hand-crafted `minecraft:spline` JSON with non-ascending `locations` via `DensityFunction.CODEC` $\to$ observe whether decoding succeeds and what `binarySearch` returns (vanilla data packs are always sorted, so this only matters for malformed third-party data packs).
+5. **(implementer) `BlockState` JSON schema in `NoiseGeneratorSettings`**: §5.3 specifies `default_block` and `default_fluid` as `BlockState` without listing the accepted JSON forms. In 26.3 vanilla `worldgen/noise_settings/*.json`, these fields use bare block identifier strings (e.g. `"minecraft:stone"`, `"minecraft:water"`). Implemented `BlockStateSpecCodec` to accept either a bare `Identifier` string (default block state with empty properties) or an object `{"Name": <Identifier>, "Properties"?: {<String>: <String>}}`. Please confirm whether `BlockState.CODEC` in 26.3 accepts any other form or validates property names/values at decode time.
+   **Answered (reader, 2026-11-25):** see `registry/identifiers-registries-tags.md` §3.3. The accepted forms are a
+   bare block id (default state) or `{"id": …, "properties": {…}}` (lower-case keys); `{"Name", "Properties"}` is the
+   pre-5006 form and must be **rejected** by this codec.
 
 ---
 
 ## Parity status
-
-not yet run
+`worldgen-router`: **30,063/30,063** values bit-identical to vanilla 26.3. All 8 noise-router fields at 134 points
+(edge cases: cell and chunk boundaries, negatives, ±2²⁴, the world border; plus random points in three distance
+bands) and the 6 aquifer-config functions where present, for all 7 built-in noise settings × 3 seeds; and whole
+final-density (16×H×16) and climate (stride 4) chunk volumes through the caching path for 2 seeds × 3 chunks each.
+Sections 6–9 (noise chunk interpolation into blocks, terrain fill, beardifier, blending) are verified by the base
+column and `golden-terrain` stages.

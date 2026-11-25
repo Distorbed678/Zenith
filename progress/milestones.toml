@@ -176,11 +176,11 @@ id = "M7"
 phase = "P2"
 title = "Terrain generation"
 weight = 8
-status = "planned"
-suites = ["golden-terrain"]
+status = "in-progress"
+suites = ["worldgen-router", "worldgen-biomes", "golden-terrain"]
 tasks = [
-  { t = "Density functions + noise router", done = false },
-  { t = "Multi-noise biome source + climate sampler", done = false },
+  { t = "Density functions + noise router", done = true },
+  { t = "Multi-noise biome source + climate sampler", done = true },
   { t = "Aquifers, ore veins, noodle caves", done = false },
   { t = "Surface rules", done = false },
   { t = "Carvers", done = false },

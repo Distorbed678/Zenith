@@ -3,6 +3,7 @@
 mod guard;
 mod oracle;
 mod parity;
+mod parity_terrain;
 mod parity_text;
 mod progress;
 mod svg;
@@ -56,6 +57,20 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ParityCmd {
+    /// M7 stage 1: noise-router fields, aquifer functions and chunk volumes vs the game's.
+    WorldgenRouter {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
+    /// M7 stage 2: climate target points, biome sources and biome zoom vs the game's.
+    WorldgenBiomes {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// Text components: decode, JSON + NBT re-encode and plain-string flattening vs the game's own.
     TextComponent {
         #[arg(long, default_value = "26.3")]
@@ -168,6 +183,12 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::RngStreams { version, write },
         } => parity::rng_streams(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::WorldgenRouter { version, write },
+        } => parity_terrain::worldgen_router(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::WorldgenBiomes { version, write },
+        } => parity_terrain::worldgen_biomes(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::TextComponent { version, write },
         } => parity_text::text_component(&version, write),

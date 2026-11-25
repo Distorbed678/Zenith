@@ -734,5 +734,10 @@ Public class and method entry points in 26.3 for black-box parity dumping:
 ---
 
 ## Parity status
-
-not yet run
+`worldgen-biomes`: **29,409/29,409** identical to vanilla 26.3. Quantized climate target points at 317 quart
+positions for all 7 noise settings × 3 seeds; the chosen biome per quart (uncached point resolver) and the zoomed
+biome per block for the overworld, large-biomes, amplified, nether and end sources plus hand-made fixed,
+checkerboard (scale 2 and 0) and multi-noise sources with deliberate parameter ties, × 4 seeds, with the warm-start
+search state carried across lookups in the game's order; and the obfuscated zoom seed. The procedural overworld
+(7,594) and nether (5) presets equal the data generator's reports entry for entry. Not yet covered: the chunk
+volume resolver path (with the `golden-terrain` biomes step) and the spawn finder.

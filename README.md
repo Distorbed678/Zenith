@@ -66,14 +66,14 @@ Parity harness, NBT, saves, registries, codecs, data packs. All headless.
 | **M4** Registries, identifiers & tags | 🟡 In progress | `▰▰▰▰▰▰▱▱▱▱` 55% | ☑ Identifier type + validation rules<br>☐ Static + dynamic registries with vanilla numeric IDs<br>☑ Block states & properties with identical global state IDs<br>☐ Tag loading + resolution order<br>☑ Feature flags | `registry-ids` 0/0<br>`blockstate-ids` 35723/35723 |
 | **M5** Codecs, data packs & text components | 🟡 In progress | `▰▰▰▰▰▰▰▰▱▱` 79% | ☑ Codec framework (decode/encode, lenient/strict, error messages)<br>☑ Data pack discovery, overlays, pack.mcmeta version ranges<br>☐ All vanilla data registries parse from the user's jar<br>☑ Text components (JSON + NBT forms), styles, translation<br>☑ Data components (item component system)<br>☐ Dialog codec (inline dialogs in click events)<br>☐ Block/item predicate codecs (can_place_on, can_break, lock) | `datapack-load` 15964/15964<br>`text-component` 19176/19178 |
 
-#### P2 World simulation: 3.6%
+#### P2 World simulation: 10.7%
 
 RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.
 
 | Milestone | Status | Progress | Tasks | Parity suites |
 |---|---|---|---|---|
 | **M6** Math, RNG & noise primitives | ✅ Done | `▰▰▰▰▰▰▰▰▰▰` 100% | ☑ Java LCG Random + Xoroshiro128++ + positional factories<br>☑ Java-exact float/double math helpers (sin table, floor, lerp…)<br>☑ Improved/Perlin, Simplex, Blended and Normal noise<br>☑ Seed hashing identical to vanilla | `rng-streams` 38594/38594<br>`noise-samples` 48300/48300<br>`math-helpers` 3552/3552 |
-| **M7** Terrain generation | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Density functions + noise router<br>☐ Multi-noise biome source + climate sampler<br>☐ Aquifers, ore veins, noodle caves<br>☐ Surface rules<br>☐ Carvers<br>☐ Golden diff: 10k chunks × 50 seeds, all dimensions | `golden-terrain` 0/0 |
+| **M7** Terrain generation | 🟡 In progress | `▰▰▰▰▰▱▱▱▱▱` 50% | ☑ Density functions + noise router<br>☑ Multi-noise biome source + climate sampler<br>☐ Aquifers, ore veins, noodle caves<br>☐ Surface rules<br>☐ Carvers<br>☐ Golden diff: 10k chunks × 50 seeds, all dimensions | `worldgen-router` 30063/30063<br>`worldgen-biomes` 29409/29409<br>`golden-terrain` 0/0 |
 | **M8** Features & structures | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Configured/placed features + placement modifiers<br>☐ Decoration step ordering<br>☐ Structure sets, placement, jigsaw assembly<br>☐ Structure templates loaded from the user's jar<br>☐ Golden diff incl. block entities & entities | `golden-features` 0/0<br>`golden-structures` 0/0 |
 | **M9** Lighting | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Block + sky light propagation, identical queue order<br>☐ Light during worldgen + updates<br>☐ Deterministic parallel lighting (same result) | `light-engine` 0/0 |
 | **M10** Server tick, block updates, redstone & fluids | ⬜ Planned | `▱▱▱▱▱▱▱▱▱▱` 0% | ☐ Chunk tickets, loading levels, chunk status pipeline<br>☐ Scheduled ticks, block events, neighbor/shape update order<br>☐ Random ticks, weather, time, game rules<br>☐ Redstone components incl. quasi-connectivity & update order<br>☐ Fluids (water/lava) spread + interactions<br>☐ Block entities ticking | `tick-oracle` 0/0<br>`redstone-contraptions` 0/0 |

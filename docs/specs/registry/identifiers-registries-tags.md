@@ -424,6 +424,25 @@ palettes, block-update packets, and particle/entity data.
    registration order (`empty`, `flowing_water`, `water`, `flowing_lava`, `lava`) and enumerating each fluid's states
    in the same Cartesian order.
 
+### 3.3 Block-state serialized form (JSON and NBT, data version ≥ 5006)
+
+26.3 (data version 5023) uses one codec for block states everywhere they are serialized: data-pack JSON (e.g.
+`default_block` / `default_fluid` in noise settings, material-rule results, feature configs), chunk-section palettes
+and other saved NBT. *(Reader, 2026-11-25.)*
+1. **Two accepted forms.** A **bare block id string** (`"minecraft:stone"`) means that block's default state. An
+   **object** `{"id": <block id>, "properties": {<name>: <value string>, …}}` gives a specific state. Decoding tries
+   the bare-id form first. An unknown block id fails. The pre-5006 names `Name` / `Properties` are **not** accepted by
+   this codec (only the data upgrade path for older saves and structure files knows them).
+2. **`properties` is lenient.** If it is missing or not a map, the default state is used. Each property of the
+   block is read from it by name: a value is the property's value **name as a string** (`"true"`, `"north"`, `"3"`);
+   a missing or invalid value silently takes the default state's value for that property, and names that are not
+   properties of the block are ignored. A block with no properties (a single state) ignores `properties` entirely.
+3. **Encoding.** The default state encodes as the bare id string. Any other state encodes as the object with
+   `properties` listing **every** property of the block, in property-name order (`String` natural order), written
+   before `id` (the dispatch key comes last, `codec/datapacks-and-codecs.md`).
+4. **Consequence for chunk palettes:** a palette is a list mixing strings (default states) and compounds (other
+   states), stored with the heterogeneous-list wrapping of `nbt/binary-format.md`.
+
 ---
 
 ## 4. Tags

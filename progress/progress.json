@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T09:35:44Z",
+  "generatedAt": "2026-11-25T10:13:34Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 12.2,
-    "parityPercent": 31.3,
+    "percent": 15.0,
+    "parityPercent": 35.3,
     "milestonesDone": 3,
     "milestonesTotal": 33,
-    "suitesPassing": 9,
-    "suitesTotal": 32
+    "suitesPassing": 11,
+    "suitesTotal": 34
   },
   "phases": [
     {
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 3.6,
+      "percent": 10.7,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -467,19 +467,19 @@
       "id": "M7",
       "phase": "P2",
       "title": "Terrain generation",
-      "status": "planned",
+      "status": "in-progress",
       "weight": 8.0,
-      "percent": 0.0,
-      "tasksDone": 0,
+      "percent": 50.0,
+      "tasksDone": 2,
       "tasksTotal": 6,
       "tasks": [
         {
           "title": "Density functions + noise router",
-          "done": false
+          "done": true
         },
         {
           "title": "Multi-noise biome source + climate sampler",
-          "done": false
+          "done": true
         },
         {
           "title": "Aquifers, ore veins, noodle caves",
@@ -499,6 +499,20 @@
         }
       ],
       "suites": [
+        {
+          "id": "worldgen-router",
+          "passed": 30063,
+          "total": 30063,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
+        },
+        {
+          "id": "worldgen-biomes",
+          "passed": 29409,
+          "total": 29409,
+          "percent": 100.0,
+          "updatedAt": "2026-11-25"
+        },
         {
           "id": "golden-terrain",
           "passed": 0,
@@ -1367,8 +1381,8 @@
     },
     {
       "date": "2026-11-25",
-      "percent": 12.2,
-      "parityPercent": 31.3
+      "percent": 15.0,
+      "parityPercent": 35.3
     }
   ]
 }

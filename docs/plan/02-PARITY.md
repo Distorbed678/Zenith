@@ -70,6 +70,8 @@ A subsystem is **done** only when its parity suites pass at 100% on the referenc
 | `text-component` | M5 | Decode status, JSON + network-NBT re-encode, NBT→JSON decode, plain + truncated flattening (`TextCheck`, full registry access) | Hand-made edge cases + every translation key (bare and with arguments) + every component-like value in the jar's data files |
 | `rng-streams` | M6 | RNG outputs identical for seeds × call patterns | Property-based |
 | `noise-samples` | M6 | Noise samplers identical at random points | 1M samples / noise |
+| `worldgen-router` | M7 | Every noise-router field and aquifer-config function at points (uncached path), final-density and climate chunk volumes (caching path), raw `f32` bits (`TerrainProbe`) | 7 noise settings × 3 seeds × 134 points; 2 seeds × 3 chunks |
+| `worldgen-biomes` | M7 | Quantized climate target points; chosen biome per quart and zoomed biome per block for every built-in source and hand-made fixed / checkerboard / tied multi-noise sources; seed obfuscation (`TerrainProbe`) | 7 settings × 3 seeds × 317 quarts; 9 sources × 4 seeds × (317 quarts + 314 blocks) |
 | `golden-terrain` | M7 | Blocks, biomes, heightmaps per chunk | 10k chunks × 50 seeds × 3 dimensions |
 | `golden-features` | M8 | Feature placement incl. block entities | Same corpus |
 | `golden-structures` | M8 | Structure starts/pieces/contents | Same corpus + forced structure seeds |
