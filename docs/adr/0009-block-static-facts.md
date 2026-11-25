@@ -30,3 +30,9 @@ runtime input.
 + Consistent with the clean-room model; one implementation serves world generation, physics, lighting and rendering.
 + Cheap, exhaustive verification: the state space is finite, so the suite checks all of it.
 − A large spec (block families, shape helpers, per-block exceptions) before M8 features and structures can be exact.
+
+## Note (2026-11-25): per-block fact tables
+Facts that the game defines per block in code and that no data file or report carries (hardness, explosion
+resistance, map colour, sound type, instrument, light emission and similar) are listed in `docs/specs/blocks/` as
+tables in our own format (`block-table.md`, `sound-types.md`, the family membership in `shapes-catalogue.md`). They
+are facts, not code or assets, and the `block-facts` suite checks every row against the user's own game.
