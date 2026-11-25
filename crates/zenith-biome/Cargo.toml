@@ -1,0 +1,17 @@
+[package]
+name = "zenith-biome"
+description = "Biome placement: climate parameters, biome sources, multi-noise search, biome zoom (from docs/specs/worldgen/biomes-and-climate.md)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+zenith-codec = { path = "../zenith-codec" }
+zenith-math = { path = "../zenith-math" }
+zenith-registry = { path = "../zenith-registry" }
+
+[lints]
+workspace = true

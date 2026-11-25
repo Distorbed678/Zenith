@@ -1613,6 +1613,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenith-biome"
+version = "0.0.1"
+dependencies = [
+ "zenith-codec",
+ "zenith-math",
+ "zenith-registry",
+]
+
+[[package]]
 name = "zenith-codec"
 version = "0.0.1"
 dependencies = [
@@ -1722,6 +1731,15 @@ dependencies = [
  "thiserror",
  "xxhash-rust",
  "zenith-nbt",
+]
+
+[[package]]
+name = "zenith-worldgen"
+version = "0.0.1"
+dependencies = [
+ "zenith-codec",
+ "zenith-math",
+ "zenith-registry",
 ]
 
 [[package]]
