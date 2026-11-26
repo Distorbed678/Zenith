@@ -13,7 +13,8 @@ import java.util.Properties;
  * Java agent entry point. Arguments: comma-separated {@code key=value} pairs:
  * {@code out} (dump path), {@code ticks} (stop after this many), {@code seed}, {@code version}, {@code scenario}, and
  * optionally {@code chunks} + {@code chunks_out} (dump requested chunks on the first tick, then stop; see
- * {@link ChunkDump}).
+ * {@link ChunkDump}). With {@code scenario=<file>,scenario_out=<file>} the agent runs a tick-by-tick scenario instead
+ * (see {@link ScenarioRunner}); {@code out} and {@code ticks} are then not needed.
  */
 public final class Agent {
     private Agent() {}
@@ -22,6 +23,18 @@ public final class Agent {
         Map<String, String> opts = parseArgs(args);
         String version = opts.getOrDefault("version", "26.3");
         Properties hooks = loadHooks(version);
+
+        // Scenario mode (see ScenarioRunner): `scenario` is then the scenario file, not a label, and the ZPD dump
+        // writer is not used.
+        if (opts.containsKey("scenario_out")) {
+            ScenarioRunner.configure(Path.of(require(opts, "scenario")), Path.of(opts.get("scenario_out")), hooks);
+            inst.addTransformer(new TickTransformer(
+                    hooks.getProperty("tick.class"),
+                    hooks.getProperty("tick.method"),
+                    hooks.getProperty("tick.descriptor")));
+            System.out.println("[zenith-oracle] attached for " + version + " in scenario mode");
+            return;
+        }
 
         Hooks.configure(
                 Path.of(require(opts, "out")),

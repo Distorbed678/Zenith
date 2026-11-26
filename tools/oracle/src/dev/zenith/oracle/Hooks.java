@@ -39,10 +39,18 @@ public final class Hooks {
     }
 
     public static void tickStart(Object server) {
+        if (ScenarioRunner.active()) {
+            ScenarioRunner.tickStart(server);
+            return;
+        }
         // Reserved for tick_start snapshots (scenario-driven); the baseline scenario records tick ends only.
     }
 
     public static synchronized void tickEnd(Object server) {
+        if (ScenarioRunner.active()) {
+            ScenarioRunner.tickEnd(server);
+            return;
+        }
         if (writer == null || halted) {
             return;
         }

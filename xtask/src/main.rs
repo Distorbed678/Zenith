@@ -215,6 +215,26 @@ enum ParityCmd {
 
 #[derive(Subcommand)]
 enum OracleCmd {
+    /// Run a tick-by-tick scenario (ZSC1) in a fresh vanilla world, N times, and compare the outputs byte for byte.
+    Scenario {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        /// Built-in example: torch-clock, water-spread, piston-12, sand-fall, crop-random-tick, ops-smoke.
+        #[arg(long)]
+        example: Option<String>,
+        /// A ZSC1 scenario file instead of an example.
+        #[arg(long)]
+        file: Option<PathBuf>,
+        /// How many times to run it (determinism check).
+        #[arg(long, default_value_t = 2)]
+        runs: u32,
+        /// Write the first run's raw ZSO1 output here.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Do not print the per-dump summary.
+        #[arg(long)]
+        quiet: bool,
+    },
     /// Generate chunks in a fresh vanilla world and print a summary of the ZTC1 dump (oracle self-check).
     Chunks {
         #[arg(long, default_value = "26.3")]
@@ -351,6 +371,24 @@ fn main() -> ExitCode {
                     write,
                 },
         } => parity::nbt_roundtrip(&version, &worlds, write),
+        Cmd::Oracle {
+            cmd:
+                OracleCmd::Scenario {
+                    version,
+                    example,
+                    file,
+                    runs,
+                    out,
+                    quiet,
+                },
+        } => oracle::scenario_command(
+            &version,
+            example.as_deref(),
+            file.as_deref(),
+            runs,
+            out.as_deref(),
+            quiet,
+        ),
         Cmd::Oracle {
             cmd: OracleCmd::Build { version },
         } => oracle::build(&version).map(|_| true),
