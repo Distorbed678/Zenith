@@ -1644,6 +1644,14 @@ Public Java classes and methods a black-box parity harness for `golden-structure
    - `NetherFortress` `StartPiece` extends `BridgeCrossing` and reports piece type ID `minecraft:nebcr` (not a distinct `minecraft:nestart` ID).
    - `WoodlandMansion` §6.3 `traverseOuterWalls` outer corner: `data.position` is mutated by `-1 * SOUTH` *before* emitting `"wall_corner"`, and then shifted by `-7 * SOUTH - 6 * WEST` (net `-8 * SOUTH - 6 * WEST`).
 
+7. **(implementer) Placement notes and gaps (`zenith-structures::pieces`)**:
+   - `placeSandBox` of the desert pyramid cellar only *records* the 5×3×5 positions (as written above); the sand itself is placed by `afterPlace`.
+   - Mineshaft `canBeReplaced` protects `type.planks`, `type.wood`, `type.fence` and `iron_chain` by block id; `FallingBlock` for the chain-vs-pillar test is the fixed list sand, red sand, gravel, suspicious sand/gravel, concrete powders, anvils, dragon egg, pointed dripstone.
+   - Ocean monument rooms are not stored in the start; `MonumentBuilding` rebuilds them on first placement with `setLargeFeatureSeed(seed, startChunk)` + one direction draw (`regeneratePiecesAfterLoad`). Room interiors were implemented from the terse §5.6 shorthand (e.g. `(5|10, 17..19, 25|32)`); the geometry of the double rooms, simple-room designs 0/1 and the wing/penthouse interiors is the most likely place for off-by-one errors until `golden-structures` runs.
+   - The end-city `Elytra` item frame and the entities spawned by `Sentry` / `Mage` / `Warrior` / `Group of Allays` / `drowned` / elder guardians are recorded as entity NBT only (no `finalizeSpawn`).
+   - Ruined portal `cold` (`canBeCold && coldEnoughToSnow(origin)`) is computed at start generation from the noise biome at the final origin and stored in the piece data.
+   - `ScatteredFeaturePiece` state (`heightPosition`, chest flags), `TemplateStructurePiece.templatePosition`, `hasPlacedSpawner` and similar flags mutate in place, so `place_in_chunk` needs the same start object for every chunk call.
+
 ---
 
 ## Parity status

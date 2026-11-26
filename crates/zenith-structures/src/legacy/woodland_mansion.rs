@@ -9,6 +9,7 @@ use crate::geom::{
     get_zero_position_with_transform, shuffle_slice,
 };
 use crate::legacy::{LegacyGenContext, LegacyPiece, get_lowest_y_in_5by5_box};
+use crate::piece_data::{PieceData, TemplateKind, TemplatePiece};
 use crate::template::TemplateManager;
 
 const CLEAR: i32 = 0;
@@ -490,12 +491,19 @@ fn emit_wmp(
         return;
     };
     let bb = tpl.bounding_box(pos, rot, BlockPos::ZERO, mirror);
-    pieces.push(LegacyPiece::new(
-        "minecraft:wmp",
-        bb,
-        Some(Direction::North),
-        0,
-    ));
+    pieces.push(
+        LegacyPiece::new("minecraft:wmp", bb, Some(Direction::North), 0).with_data(
+            PieceData::Template(Box::new(TemplatePiece {
+                kind: TemplateKind::WoodlandMansion,
+                template: id,
+                position: pos,
+                rotation: rot,
+                mirror,
+                pivot: BlockPos::ZERO,
+                height_adjusted: false,
+            })),
+        ),
+    );
 }
 
 fn generate_mansion(

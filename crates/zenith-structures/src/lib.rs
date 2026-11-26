@@ -2,13 +2,20 @@
 //! processors, and [`zenith_worldgen::Beardifier`] handoff (`docs/specs/worldgen/structures-placement-and-jigsaw.md`,
 //! `docs/specs/worldgen/structures-legacy-pieces.md`).
 
+pub mod block_xform;
 pub mod data;
 pub mod generator;
 pub mod geom;
 pub mod jigsaw;
 pub mod legacy;
+pub mod piece;
+pub mod piece_data;
+pub mod pieces;
+pub mod place;
 pub mod placement;
 pub mod template;
+pub mod template_place;
+pub mod world;
 
 pub use data::{
     DimensionPadding, ExclusionZone, FrequencyReductionMethod, JigsawConfig, LiquidSettings,
@@ -27,6 +34,8 @@ pub use geom::{
 };
 pub use jigsaw::{PoolAliasLookup, PoolElementPiece, StructureJigsawJunction};
 pub use legacy::LegacyPiece;
+pub use piece_data::{PieceData, TemplateKind, TemplatePiece};
+pub use place::{PieceCall, PlacementEnv, place_pool_element, post_process_piece};
 pub use placement::{
     StructurePlacementState, compute_dimension_origin, potential_random_spread_chunk,
 };
@@ -35,6 +44,7 @@ pub use template::{
     StructurePlaceSettings, StructureTemplate, TemplateError, TemplateManager, process_block_infos,
     transform_block_state,
 };
+pub use world::{MemoryWorld, StructureWorld, WorldgenRandom, writable_area};
 
 #[cfg(test)]
 mod tests {
@@ -267,6 +277,7 @@ mod tests {
             terrain_adaptation: TerrainAdjustment::BeardThin,
             bounding_box: adjust_bounding_box(piece_bb, TerrainAdjustment::BeardThin),
             pieces: vec![StructurePiece {
+                data: crate::piece_data::PieceData::None,
                 kind: "minecraft:jigsaw",
                 bounding_box: piece_bb,
                 orientation: None,

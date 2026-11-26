@@ -10,6 +10,8 @@ use crate::legacy::{
     LegacyGenContext, LegacyPiece, has_collision, move_below_sea_level, offset_pieces_vertically,
     pieces_bounding_box,
 };
+use crate::piece_data::PieceData;
+use crate::pieces::mineshaft::{MineshaftKind, MineshaftPiece};
 
 #[derive(Debug, Clone)]
 enum MinePiece {
@@ -21,6 +23,8 @@ enum MinePiece {
         bb: BoundingBox,
         orientation: Direction,
         gen_depth: i32,
+        has_rails: bool,
+        spider: bool,
     },
     Crossing {
         bb: BoundingBox,
@@ -39,21 +43,58 @@ impl MinePiece {
     fn to_legacy(&self) -> LegacyPiece {
         match *self {
             Self::Room { bb, gen_depth } => {
-                LegacyPiece::new("minecraft:msroom", bb, None, gen_depth)
+                LegacyPiece::new("minecraft:msroom", bb, None, gen_depth).with_data(
+                    PieceData::Mineshaft(MineshaftPiece {
+                        mtype: MineshaftType::Normal,
+                        kind: MineshaftKind::Room {
+                            entrance_boxes: Vec::new(),
+                        },
+                    }),
+                )
             }
             Self::Corridor {
                 bb,
                 orientation,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:mscorridor", bb, Some(orientation), gen_depth),
-            Self::Crossing { bb, gen_depth, .. } => {
-                LegacyPiece::new("minecraft:mscrossing", bb, None, gen_depth)
+                has_rails,
+                spider,
+            } => {
+                let sections = if matches!(orientation, Direction::North | Direction::South) {
+                    bb.z_span()
+                } else {
+                    bb.x_span()
+                } / 5;
+                LegacyPiece::new("minecraft:mscorridor", bb, Some(orientation), gen_depth)
+                    .with_data(PieceData::Mineshaft(MineshaftPiece {
+                        mtype: MineshaftType::Normal,
+                        kind: MineshaftKind::Corridor {
+                            has_rails,
+                            spider_corridor: spider,
+                            has_placed_spider: false,
+                            num_sections: sections,
+                        },
+                    }))
             }
+            Self::Crossing {
+                bb,
+                gen_depth,
+                is_two_floored,
+                ..
+            } => LegacyPiece::new("minecraft:mscrossing", bb, None, gen_depth).with_data(
+                PieceData::Mineshaft(MineshaftPiece {
+                    mtype: MineshaftType::Normal,
+                    kind: MineshaftKind::Crossing { is_two_floored },
+                }),
+            ),
             Self::Stairs {
                 bb,
                 orientation,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:msstairs", bb, Some(orientation), gen_depth),
+            } => LegacyPiece::new("minecraft:msstairs", bb, Some(orientation), gen_depth)
+                .with_data(PieceData::Mineshaft(MineshaftPiece {
+                    mtype: MineshaftType::Normal,
+                    kind: MineshaftKind::Stairs,
+                })),
         }
     }
 }
@@ -119,6 +160,11 @@ pub fn generate(
         return None;
     }
 
+    for p in &mut pieces {
+        if let PieceData::Mineshaft(m) = &mut p.data {
+            m.mtype = mineshaft_type;
+        }
+    }
     Some(pieces)
 }
 
@@ -159,11 +205,13 @@ fn generate_and_add_piece(
         let bb = find_corridor_size(pieces, rng, foot_x, foot_y, foot_z, dir)?;
         // MineShaftCorridor constructor RNG draws (§2.5B):
         let has_rails = rng.next_int_bounded(3) == 0;
-        let _spider_corridor = !has_rails && rng.next_int_bounded(23) == 0;
+        let spider = !has_rails && rng.next_int_bounded(23) == 0;
         MinePiece::Corridor {
             bb,
             orientation: dir,
             gen_depth: depth + 1,
+            has_rails,
+            spider,
         }
     };
 
@@ -187,6 +235,8 @@ fn add_children(
 ) {
     match *piece {
         MinePiece::Room { bb, gen_depth } => {
+            let room_idx = pieces.len() - 1;
+            let mut boxes: Vec<BoundingBox> = Vec::new();
             let height_space = (bb.y_span() - 4).max(1);
             // NORTH
             let mut pos = 0;
@@ -196,7 +246,7 @@ fn add_children(
                     break;
                 }
                 let y = bb.min_y + rng.next_int_bounded(height_space) + 1;
-                let _ = generate_and_add_piece(
+                if let Some(cb) = generate_and_add_piece(
                     start_bb,
                     pieces,
                     rng,
@@ -205,7 +255,16 @@ fn add_children(
                     bb.min_z - 1,
                     Direction::North,
                     gen_depth,
-                );
+                ) {
+                    boxes.push(BoundingBox::from_coords(
+                        cb.min_x,
+                        cb.min_y,
+                        bb.min_z,
+                        cb.max_x,
+                        cb.max_y,
+                        bb.min_z + 1,
+                    ));
+                }
                 pos += 4;
             }
             // SOUTH
@@ -216,7 +275,7 @@ fn add_children(
                     break;
                 }
                 let y = bb.min_y + rng.next_int_bounded(height_space) + 1;
-                let _ = generate_and_add_piece(
+                if let Some(cb) = generate_and_add_piece(
                     start_bb,
                     pieces,
                     rng,
@@ -225,7 +284,16 @@ fn add_children(
                     bb.max_z + 1,
                     Direction::South,
                     gen_depth,
-                );
+                ) {
+                    boxes.push(BoundingBox::from_coords(
+                        cb.min_x,
+                        cb.min_y,
+                        bb.max_z - 1,
+                        cb.max_x,
+                        cb.max_y,
+                        bb.max_z,
+                    ));
+                }
                 pos += 4;
             }
             // WEST
@@ -236,7 +304,7 @@ fn add_children(
                     break;
                 }
                 let y = bb.min_y + rng.next_int_bounded(height_space) + 1;
-                let _ = generate_and_add_piece(
+                if let Some(cb) = generate_and_add_piece(
                     start_bb,
                     pieces,
                     rng,
@@ -245,7 +313,16 @@ fn add_children(
                     bb.min_z + pos,
                     Direction::West,
                     gen_depth,
-                );
+                ) {
+                    boxes.push(BoundingBox::from_coords(
+                        bb.min_x,
+                        cb.min_y,
+                        cb.min_z,
+                        bb.min_x + 1,
+                        cb.max_y,
+                        cb.max_z,
+                    ));
+                }
                 pos += 4;
             }
             // EAST
@@ -256,7 +333,7 @@ fn add_children(
                     break;
                 }
                 let y = bb.min_y + rng.next_int_bounded(height_space) + 1;
-                let _ = generate_and_add_piece(
+                if let Some(cb) = generate_and_add_piece(
                     start_bb,
                     pieces,
                     rng,
@@ -265,14 +342,30 @@ fn add_children(
                     bb.min_z + pos,
                     Direction::East,
                     gen_depth,
-                );
+                ) {
+                    boxes.push(BoundingBox::from_coords(
+                        bb.max_x - 1,
+                        cb.min_y,
+                        cb.min_z,
+                        bb.max_x,
+                        cb.max_y,
+                        cb.max_z,
+                    ));
+                }
                 pos += 4;
             }
+            pieces[room_idx].data = PieceData::Mineshaft(MineshaftPiece {
+                mtype: MineshaftType::Normal,
+                kind: MineshaftKind::Room {
+                    entrance_boxes: boxes,
+                },
+            });
         }
         MinePiece::Corridor {
             bb,
             orientation,
             gen_depth,
+            ..
         } => {
             let end_sel = rng.next_int_bounded(4);
             let y = bb.min_y - 1 + rng.next_int_bounded(3);

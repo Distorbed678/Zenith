@@ -22,7 +22,7 @@ use crate::data::{
     StructureProcessor,
 };
 use crate::geom::{
-    BlockPos, BoundingBox, BoundingBoxExt, Direction, FrontAndTop, Mirror, Rotation, is_horizontal,
+    BlockPos, BoundingBox, BoundingBoxExt, FrontAndTop, Mirror, Rotation, is_horizontal,
     random_horizontal_direction, shuffle_slice, transform_pos,
 };
 
@@ -1292,71 +1292,12 @@ fn apply_blackstone_replace(state_id: u32, blocks: &BlockStateTable) -> Option<u
     .ok()
 }
 
-/// Computes `Direction` mirroring + rotation on a block state's properties (general helper for placement).
+/// `state.mirror(mirror).rotate(rotation)` for a global block-state id (see [`crate::block_xform`]).
 pub fn transform_block_state(
     state_id: u32,
     mirror: Mirror,
     rotation: Rotation,
     blocks: &BlockStateTable,
 ) -> u32 {
-    if mirror == Mirror::None && rotation == Rotation::None {
-        return state_id;
-    }
-    let Some(st) = blocks.state_by_id_exact(state_id as i32) else {
-        return state_id;
-    };
-    if st.properties.is_empty() {
-        return state_id;
-    }
-    let mut props: BTreeMap<String, String> = st.properties.iter().cloned().collect();
-    if let Some(facing_s) = props.get("facing").cloned()
-        && let Some(d) = Direction::from_name(&facing_s)
-    {
-        let d = rotation.rotate_dir(mirror.mirror_dir(d));
-        props.insert("facing".to_owned(), d.name().to_owned());
-    }
-    if let Some(orient_s) = props.get("orientation").cloned()
-        && let Some(ft) = FrontAndTop::from_name(&orient_s)
-    {
-        let ft = ft.mirror(mirror).rotate(rotation);
-        props.insert("orientation".to_owned(), ft.name().to_owned());
-    }
-    if let Some(axis_s) = props.get("axis").cloned()
-        && matches!(
-            rotation,
-            Rotation::Clockwise90 | Rotation::Counterclockwise90
-        )
-    {
-        let new_axis = match axis_s.as_str() {
-            "x" => "z",
-            "z" => "x",
-            other => other,
-        };
-        props.insert("axis".to_owned(), new_axis.to_owned());
-    }
-    // Horizontal connection booleans/enums (north, east, south, west)
-    if props.contains_key("north")
-        && props.contains_key("east")
-        && props.contains_key("south")
-        && props.contains_key("west")
-    {
-        let orig = [
-            (Direction::North, props["north"].clone()),
-            (Direction::East, props["east"].clone()),
-            (Direction::South, props["south"].clone()),
-            (Direction::West, props["west"].clone()),
-        ];
-        for (dir, val) in orig {
-            let new_dir = rotation.rotate_dir(mirror.mirror_dir(dir));
-            props.insert(new_dir.name().to_owned(), val);
-        }
-    }
-    resolve_block_state(
-        blocks,
-        &BlockStateSpec {
-            name: st.block_id.clone(),
-            properties: props,
-        },
-    )
-    .unwrap_or(state_id)
+    crate::block_xform::mirror_rotate_state(blocks, state_id, mirror, rotation)
 }

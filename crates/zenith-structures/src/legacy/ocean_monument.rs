@@ -7,6 +7,8 @@ use zenith_worldgen::HeightmapKind;
 
 use crate::geom::{BoundingBox, BoundingBoxExt, random_horizontal_direction};
 use crate::legacy::{LegacyGenContext, LegacyPiece, on_top_of_chunk_center};
+use crate::piece_data::PieceData;
+use crate::pieces::monument::MonumentBuilding;
 
 /// Generates the top-level `MonumentBuilding` (`minecraft:omb`) piece for `minecraft:ocean_monument` (§5.2).
 ///
@@ -34,6 +36,9 @@ pub fn generate(
         let north = (chunk_z << 4) - 29;
         let dir = random_horizontal_direction(rng);
         let bb = BoundingBox::make_box(west, 39, north, dir, 58, 23, 58);
-        vec![LegacyPiece::new("minecraft:omb", bb, Some(dir), 0)]
+        vec![
+            LegacyPiece::new("minecraft:omb", bb, Some(dir), 0)
+                .with_data(PieceData::Monument(MonumentBuilding::default())),
+        ]
     })
 }

@@ -6,6 +6,7 @@ use zenith_registry::Identifier;
 
 use crate::geom::{BlockPos, BoundingBox, BoundingBoxExt, Direction, Mirror, Rotation};
 use crate::legacy::{LegacyGenContext, LegacyPiece, get_lowest_y_in_5by5_box};
+use crate::piece_data::{PieceData, TemplateKind, TemplatePiece};
 use crate::template::TemplateManager;
 
 const MAX_GEN_DEPTH: i32 = 8;
@@ -26,6 +27,7 @@ const FAT_TOWER_BRIDGES: [(Rotation, BlockPos); 4] = [
 
 #[derive(Debug, Clone)]
 struct EcPiece {
+    name: String,
     template_pos: BlockPos,
     rot: Rotation,
     bb: BoundingBox,
@@ -94,7 +96,30 @@ pub fn generate(
     Some(
         pieces
             .into_iter()
-            .map(|p| LegacyPiece::new("minecraft:ecp", p.bb, Some(Direction::North), p.gen_depth))
+            .map(|p| {
+                let overwrite = !matches!(
+                    p.name.as_str(),
+                    "second_floor_1"
+                        | "third_floor_1"
+                        | "second_floor_2"
+                        | "third_floor_2"
+                        | "second_roof"
+                );
+                LegacyPiece::new("minecraft:ecp", p.bb, Some(Direction::North), p.gen_depth)
+                    .with_data(PieceData::Template(Box::new(TemplatePiece {
+                        kind: TemplateKind::EndCity { overwrite },
+                        template: Identifier::with_default_namespace(format!(
+                            "end_city/{}",
+                            p.name
+                        ))
+                        .expect("valid"),
+                        position: p.template_pos,
+                        rotation: p.rot,
+                        mirror: Mirror::None,
+                        pivot: BlockPos::ZERO,
+                        height_adjusted: false,
+                    })))
+            })
             .collect(),
     )
 }
@@ -104,6 +129,7 @@ fn make_piece(tm: &TemplateManager, pos: BlockPos, name: &str, rot: Rotation) ->
     let tpl = tm.get(&id).ok()?;
     let bb = tpl.bounding_box(pos, rot, BlockPos::ZERO, Mirror::None);
     Some(EcPiece {
+        name: name.to_owned(),
         template_pos: pos,
         rot,
         bb,

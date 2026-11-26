@@ -8,6 +8,8 @@ use crate::geom::{
     set_large_feature_seed,
 };
 use crate::legacy::{LegacyGenContext, LegacyPiece, has_collision, move_below_sea_level};
+use crate::piece_data::PieceData;
+use crate::pieces::stronghold::{ShKind, SmallDoor, StrongholdPiece};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WeightKind {
@@ -195,75 +197,187 @@ enum ShPiece {
 
 impl ShPiece {
     fn to_legacy(&self) -> LegacyPiece {
-        match *self {
+        let door = LAST_DOOR.get();
+        let (id, bb, orient, gd, kind, door) = match *self {
             Self::StartPiece {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shstart", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shstart",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::Start,
+                SmallDoor::Opening,
+            ),
             Self::StairsDown {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shsd", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shsd",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::StairsDown,
+                door,
+            ),
             Self::Straight {
                 bb,
                 orient,
                 gen_depth,
-                ..
-            } => LegacyPiece::new("minecraft:shs", bb, Some(orient), gen_depth),
+                left_child,
+                right_child,
+            } => (
+                "minecraft:shs",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::Straight {
+                    left_child,
+                    right_child,
+                },
+                door,
+            ),
             Self::ChestCorridor {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shcc", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shcc",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::ChestCorridor {
+                    has_placed_chest: false,
+                },
+                door,
+            ),
             Self::FillerCorridor {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shfc", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shfc",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::FillerCorridor,
+                SmallDoor::Opening,
+            ),
             Self::LeftTurn {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shlt", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shlt",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::LeftTurn,
+                door,
+            ),
             Self::RightTurn {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shrt", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shrt",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::RightTurn,
+                door,
+            ),
             Self::PrisonHall {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shph", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shph",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::PrisonHall,
+                door,
+            ),
             Self::RoomCrossing {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shrc", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shrc",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::RoomCrossing {
+                    room_type: LAST_ROOM_TYPE.get(),
+                },
+                door,
+            ),
             Self::StraightStairsDown {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shssd", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shssd",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::StraightStairsDown,
+                door,
+            ),
             Self::FiveCrossing {
                 bb,
                 orient,
                 gen_depth,
-                ..
-            } => LegacyPiece::new("minecraft:sh5c", bb, Some(orient), gen_depth),
+                left_low,
+                left_high,
+                right_low,
+                right_high,
+            } => (
+                "minecraft:sh5c",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::FiveCrossing {
+                    left_low,
+                    left_high,
+                    right_low,
+                    right_high,
+                },
+                door,
+            ),
             Self::Library {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shli", bb, Some(orient), gen_depth),
+            } => (
+                "minecraft:shli",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::Library,
+                door,
+            ),
             Self::PortalRoom {
                 bb,
                 orient,
                 gen_depth,
-            } => LegacyPiece::new("minecraft:shpr", bb, Some(orient), gen_depth),
-        }
+            } => (
+                "minecraft:shpr",
+                bb,
+                orient,
+                gen_depth,
+                ShKind::PortalRoom {
+                    has_placed_spawner: false,
+                },
+                SmallDoor::Opening,
+            ),
+        };
+        LegacyPiece::new(id, bb, Some(orient), gd)
+            .with_data(PieceData::Stronghold(StrongholdPiece { kind, door }))
     }
 }
 
@@ -335,9 +449,22 @@ fn is_ok_box(bb: BoundingBox) -> bool {
     bb.min_y > 10
 }
 
+thread_local! {
+    /// Door type of the piece most recently created by `create_piece` (consumed by `to_legacy`).
+    static LAST_DOOR: std::cell::Cell<SmallDoor> = const { std::cell::Cell::new(SmallDoor::Opening) };
+    /// `RoomCrossing.type` of the piece most recently created.
+    static LAST_ROOM_TYPE: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+}
+
 #[inline]
 fn random_small_door(rng: &mut LegacyRandom) {
-    let _ = rng.next_int_bounded(5);
+    let door = match rng.next_int_bounded(5) {
+        0 | 1 => SmallDoor::Opening,
+        2 => SmallDoor::WoodDoor,
+        3 => SmallDoor::Grates,
+        _ => SmallDoor::IronDoor,
+    };
+    LAST_DOOR.set(door);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -410,7 +537,7 @@ fn create_piece(
                 return None;
             }
             random_small_door(rng);
-            let _room_type = rng.next_int_bounded(5);
+            LAST_ROOM_TYPE.set(rng.next_int_bounded(5));
             Some(ShPiece::RoomCrossing {
                 bb,
                 orient: dir,

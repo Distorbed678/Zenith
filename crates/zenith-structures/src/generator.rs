@@ -22,6 +22,7 @@ use crate::data::{
 use crate::geom::{BlockPos, BoundingBox, BoundingBoxExt, Direction, set_large_feature_seed};
 use crate::jigsaw::{JigsawGenContext, PoolElementPiece, generate_jigsaw_pieces};
 use crate::legacy::{LegacyGenContext, generate_legacy_pieces};
+use crate::piece_data::PieceData;
 use crate::placement::{
     StructurePlacementState, compute_dimension_origin, could_structure_exist_in_column,
     sample_noise_biome_point,
@@ -43,6 +44,8 @@ pub struct StructurePiece {
     /// Full jigsaw piece data when `kind == "minecraft:jigsaw"` (used by [`Beardifier`] and
     /// downstream block placement).
     pub jigsaw: Option<PoolElementPiece>,
+    /// Kind-specific placement data of legacy (non-jigsaw) pieces.
+    pub data: PieceData,
 }
 
 /// One valid generated structure start (`StructureStart`, §2.1 & §2.3).
@@ -103,6 +106,7 @@ pub struct StructureGenerator {
     chunk_min_y: i32,
     chunk_height: i32,
     soul_sand_block_id: Option<u32>,
+    biome_data: HashMap<Identifier, zenith_worldgen::BiomeData>,
 }
 
 impl StructureGenerator {
@@ -156,6 +160,11 @@ impl StructureGenerator {
             chunk_min_y,
             chunk_height,
             soul_sand_block_id,
+            biome_data: worldgen_data
+                .biomes()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
         }
     }
 
@@ -408,6 +417,7 @@ impl StructureGenerator {
                             orientation: None,
                             gen_depth: 0,
                             jigsaw: Some(p),
+                            data: PieceData::None,
                         })
                         .collect(),
                 )
@@ -426,6 +436,7 @@ impl StructureGenerator {
                             orientation: p.orientation,
                             gen_depth: p.gen_depth,
                             jigsaw: None,
+                            data: p.data,
                         })
                         .collect(),
                 )
@@ -742,6 +753,23 @@ impl LegacyGenContext for GenContextImpl<'_> {
             self.generator.chunk_max_y(),
             self.allowed_biomes,
         )
+    }
+
+    fn cold_enough_to_snow(&mut self, pos: BlockPos) -> bool {
+        let biome = sample_noise_biome_point(
+            &self.generator.biome_source,
+            self.generator.noise_generator.random_state(),
+            self.sampler_ctx,
+            self.search_state,
+            pos.x >> 2,
+            pos.y >> 2,
+            pos.z >> 2,
+        );
+        let sea = self.generator.noise_generator.settings().sea_level();
+        self.generator
+            .biome_data
+            .get(&biome)
+            .is_some_and(|d| d.cold_enough_to_snow(pos.x, pos.y, pos.z, sea))
     }
 
     fn is_valid_biome(&mut self, pos: BlockPos) -> bool {

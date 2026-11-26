@@ -16,6 +16,10 @@ use crate::legacy::{
     LegacyGenContext, LegacyPiece, get_lowest_y, get_mean_first_occupied_height,
     on_top_of_chunk_center,
 };
+use crate::piece_data::{
+    JungleTempleState, PieceData, RuinedPortalPiece, ScatteredState, SwampHutState, TemplateKind,
+    TemplatePiece,
+};
 use crate::template::TemplateManager;
 
 // ---------------------------------------------------------------------------
@@ -30,6 +34,7 @@ fn generate_single_piece(
     height: i32,
     depth: i32,
     piece_kind: &'static str,
+    data: PieceData,
     rng: &mut LegacyRandom,
     ctx: &mut dyn LegacyGenContext,
 ) -> Option<Vec<LegacyPiece>> {
@@ -47,7 +52,9 @@ fn generate_single_piece(
     }
     let dir = random_horizontal_direction(rng);
     let bb = BoundingBox::make_box(chunk_x << 4, 64, chunk_z << 4, dir, width, height, depth);
-    Some(vec![LegacyPiece::new(piece_kind, bb, Some(dir), 0)])
+    Some(vec![
+        LegacyPiece::new(piece_kind, bb, Some(dir), 0).with_data(data),
+    ])
 }
 
 /// §7 Desert Pyramid (`minecraft:desert_pyramid`, piece `minecraft:tedp`).
@@ -57,7 +64,17 @@ pub fn generate_desert_pyramid(
     rng: &mut LegacyRandom,
     ctx: &mut dyn LegacyGenContext,
 ) -> Option<Vec<LegacyPiece>> {
-    generate_single_piece(chunk_x, chunk_z, 21, 15, 21, "minecraft:tedp", rng, ctx)
+    generate_single_piece(
+        chunk_x,
+        chunk_z,
+        21,
+        15,
+        21,
+        "minecraft:tedp",
+        PieceData::DesertPyramid(ScatteredState::default()),
+        rng,
+        ctx,
+    )
 }
 
 /// §8 Jungle Temple (`minecraft:jungle_temple`, piece `minecraft:tejp`).
@@ -67,7 +84,17 @@ pub fn generate_jungle_temple(
     rng: &mut LegacyRandom,
     ctx: &mut dyn LegacyGenContext,
 ) -> Option<Vec<LegacyPiece>> {
-    generate_single_piece(chunk_x, chunk_z, 12, 10, 15, "minecraft:tejp", rng, ctx)
+    generate_single_piece(
+        chunk_x,
+        chunk_z,
+        12,
+        10,
+        15,
+        "minecraft:tejp",
+        PieceData::JungleTemple(JungleTempleState::default()),
+        rng,
+        ctx,
+    )
 }
 
 /// §9 Swamp Hut (`minecraft:swamp_hut`, piece `minecraft:tesh`).
@@ -85,7 +112,10 @@ pub fn generate_swamp_hut(
         |_ctx| {
             let dir = random_horizontal_direction(rng);
             let bb = BoundingBox::make_box(chunk_x << 4, 64, chunk_z << 4, dir, 7, 7, 9);
-            vec![LegacyPiece::new("minecraft:tesh", bb, Some(dir), 0)]
+            vec![
+                LegacyPiece::new("minecraft:tesh", bb, Some(dir), 0)
+                    .with_data(PieceData::SwampHut(SwampHutState::default())),
+            ]
         },
     )
 }
@@ -99,7 +129,7 @@ pub fn generate_buried_treasure(
 ) -> Option<Vec<LegacyPiece>> {
     on_top_of_chunk_center(chunk_x, chunk_z, HeightmapKind::OceanFloorWg, ctx, |_ctx| {
         let bb = BoundingBox::point((chunk_x << 4) + 9, 90, (chunk_z << 4) + 9);
-        vec![LegacyPiece::new("minecraft:btp", bb, None, 0)]
+        vec![LegacyPiece::new("minecraft:btp", bb, None, 0).with_data(PieceData::BuriedTreasure)]
     })
 }
 
@@ -120,12 +150,19 @@ fn igloo_piece(
     let tpl = tm.get(&id).ok()?;
     let template_pos = start_pos.add(offset).offset(0, -depth_offset, 0);
     let bb = tpl.bounding_box(template_pos, rot, pivot, Mirror::None);
-    Some(LegacyPiece::new(
-        "minecraft:iglu",
-        bb,
-        Some(Direction::North),
-        0,
-    ))
+    Some(
+        LegacyPiece::new("minecraft:iglu", bb, Some(Direction::North), 0).with_data(
+            PieceData::Template(Box::new(TemplatePiece {
+                kind: TemplateKind::Igloo,
+                template: id,
+                position: template_pos,
+                rotation: rot,
+                mirror: Mirror::None,
+                pivot,
+                height_adjusted: false,
+            })),
+        ),
+    )
 }
 
 /// §10 Igloo (`minecraft:igloo`, piece `minecraft:iglu`).
@@ -269,12 +306,19 @@ pub fn generate_shipwreck(
             offset.y = h;
             bb = tpl.bounding_box(offset, rot, pivot, Mirror::None);
         }
-        vec![LegacyPiece::new(
-            "minecraft:shipwreck",
-            bb,
-            Some(Direction::North),
-            0,
-        )]
+        vec![
+            LegacyPiece::new("minecraft:shipwreck", bb, Some(Direction::North), 0).with_data(
+                PieceData::Template(Box::new(TemplatePiece {
+                    kind: TemplateKind::Shipwreck { is_beached },
+                    template: id.clone(),
+                    position: offset,
+                    rotation: rot,
+                    mirror: Mirror::None,
+                    pivot,
+                    height_adjusted: tpl.size.x > 32 || tpl.size.y > 32,
+                })),
+            ),
+        ]
     })
 }
 
@@ -347,6 +391,7 @@ const BIG_RUINS_MOSSY: [&str; 4] = [
     "underwater_ruin/big_mossy_8",
 ];
 
+#[allow(clippy::too_many_arguments)]
 fn add_ocean_ruin_piece(
     tm: &TemplateManager,
     pieces: &mut Vec<LegacyPiece>,
@@ -354,19 +399,31 @@ fn add_ocean_ruin_piece(
     rot: Rotation,
     temp: OceanRuinTemp,
     is_large: bool,
+    base_integrity: f32,
     rng: &mut LegacyRandom,
 ) {
-    let push_tpl = |pieces: &mut Vec<LegacyPiece>, name: &str| {
+    let push_tpl = |pieces: &mut Vec<LegacyPiece>, name: &str, integrity: f32| {
         if let Ok(id) = Identifier::with_default_namespace(name)
             && let Ok(tpl) = tm.get(&id)
         {
             let bb = tpl.bounding_box(pos, rot, BlockPos::ZERO, Mirror::None);
-            pieces.push(LegacyPiece::new(
-                "minecraft:orp",
-                bb,
-                Some(Direction::North),
-                0,
-            ));
+            pieces.push(
+                LegacyPiece::new("minecraft:orp", bb, Some(Direction::North), 0).with_data(
+                    PieceData::Template(Box::new(TemplatePiece {
+                        kind: TemplateKind::OceanRuin {
+                            integrity,
+                            temp,
+                            is_large,
+                        },
+                        template: id,
+                        position: pos,
+                        rotation: rot,
+                        mirror: Mirror::None,
+                        pivot: BlockPos::ZERO,
+                        height_adjusted: false,
+                    })),
+                ),
+            );
         }
     };
     match temp {
@@ -376,19 +433,19 @@ fn add_ocean_ruin_piece(
             } else {
                 WARM_RUINS[rng.next_int_bounded(WARM_RUINS.len() as i32) as usize]
             };
-            push_tpl(pieces, name);
+            push_tpl(pieces, name, base_integrity);
         }
         OceanRuinTemp::Cold => {
             if is_large {
                 let idx = rng.next_int_bounded(4) as usize;
-                push_tpl(pieces, BIG_RUINS_BRICK[idx]);
-                push_tpl(pieces, BIG_RUINS_CRACKED[idx]);
-                push_tpl(pieces, BIG_RUINS_MOSSY[idx]);
+                push_tpl(pieces, BIG_RUINS_BRICK[idx], base_integrity);
+                push_tpl(pieces, BIG_RUINS_CRACKED[idx], 0.7);
+                push_tpl(pieces, BIG_RUINS_MOSSY[idx], 0.5);
             } else {
                 let idx = rng.next_int_bounded(8) as usize;
-                push_tpl(pieces, RUINS_BRICK[idx]);
-                push_tpl(pieces, RUINS_CRACKED[idx]);
-                push_tpl(pieces, RUINS_MOSSY[idx]);
+                push_tpl(pieces, RUINS_BRICK[idx], base_integrity);
+                push_tpl(pieces, RUINS_CRACKED[idx], 0.7);
+                push_tpl(pieces, RUINS_MOSSY[idx], 0.5);
             }
         }
     }
@@ -410,7 +467,17 @@ pub fn generate_ocean_ruin(
         let rot = Rotation::random(rng);
         let is_large = rng.next_float() <= large_probability;
         let mut pieces = Vec::new();
-        add_ocean_ruin_piece(tm, &mut pieces, offset, rot, biome_temp, is_large, rng);
+        let base_integrity = if is_large { 0.9_f32 } else { 0.8_f32 };
+        add_ocean_ruin_piece(
+            tm,
+            &mut pieces,
+            offset,
+            rot,
+            biome_temp,
+            is_large,
+            base_integrity,
+            rng,
+        );
 
         if is_large && rng.next_float() <= cluster_probability {
             let parent_pos = BlockPos::new(offset.x, 90, offset.z);
@@ -468,7 +535,16 @@ pub fn generate_ocean_ruin(
                 .add(pos);
                 let next_bb = BoundingBox::from_corners(pos, next_corner);
                 if !next_bb.intersects(parent_bb) {
-                    add_ocean_ruin_piece(tm, &mut pieces, pos, next_rot, biome_temp, false, rng);
+                    add_ocean_ruin_piece(
+                        tm,
+                        &mut pieces,
+                        pos,
+                        next_rot,
+                        biome_temp,
+                        false,
+                        0.8,
+                        rng,
+                    );
                 }
             }
         }
@@ -542,12 +618,19 @@ pub fn generate_nether_fossil(
     let id = Identifier::with_default_namespace(name).ok()?;
     let tpl = ctx.template_manager().get(&id).ok()?;
     let bb = tpl.bounding_box(pos, rot, BlockPos::ZERO, Mirror::None);
-    Some(vec![LegacyPiece::new(
-        "minecraft:nefos",
-        bb,
-        Some(Direction::North),
-        0,
-    )])
+    Some(vec![
+        LegacyPiece::new("minecraft:nefos", bb, Some(Direction::North), 0).with_data(
+            PieceData::Template(Box::new(TemplatePiece {
+                kind: TemplateKind::NetherFossil,
+                template: id,
+                position: pos,
+                rotation: rot,
+                mirror: Mirror::None,
+                pivot: BlockPos::ZERO,
+                height_adjusted: false,
+            })),
+        ),
+    ])
 }
 
 // ---------------------------------------------------------------------------
@@ -703,10 +786,27 @@ pub fn generate_ruined_portal(
         return None;
     }
     let final_bb = tpl.bounding_box(origin, rot, pivot, mirror);
-    Some(vec![LegacyPiece::new(
-        "minecraft:rupo",
-        final_bb,
-        Some(Direction::North),
-        0,
-    )])
+    let cold =
+        setup.can_be_cold && ctx.cold_enough_to_snow(BlockPos::new(origin.x, origin.y, origin.z));
+    Some(vec![
+        LegacyPiece::new("minecraft:rupo", final_bb, Some(Direction::North), 0).with_data(
+            PieceData::Template(Box::new(TemplatePiece {
+                kind: TemplateKind::RuinedPortal(RuinedPortalPiece {
+                    placement: setup.placement,
+                    cold,
+                    mossiness: setup.mossiness,
+                    air_pocket,
+                    overgrown: setup.overgrown,
+                    vines: setup.vines,
+                    replace_with_blackstone: setup.replace_with_blackstone,
+                }),
+                template: id,
+                position: origin,
+                rotation: rot,
+                mirror,
+                pivot,
+                height_adjusted: false,
+            })),
+        ),
+    ])
 }

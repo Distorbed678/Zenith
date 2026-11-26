@@ -17,10 +17,11 @@ use zenith_worldgen::{HeightmapKind, WorldGenerationContext};
 
 use crate::data::{StructureData, StructureKind};
 use crate::geom::{BlockPos, BoundingBox, BoundingBoxExt, Direction, Rotation};
+use crate::piece_data::PieceData;
 use crate::template::TemplateManager;
 
 /// One generated piece of a legacy structure (`StructurePiece`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LegacyPiece {
     /// Registered `minecraft:worldgen/structure_piece` identifier (e.g. `"minecraft:msroom"`).
     pub kind: &'static str,
@@ -30,6 +31,8 @@ pub struct LegacyPiece {
     pub orientation: Option<Direction>,
     /// Generation depth (`"GD"`).
     pub gen_depth: i32,
+    /// Kind-specific data needed for block placement.
+    pub data: PieceData,
 }
 
 impl LegacyPiece {
@@ -46,13 +49,23 @@ impl LegacyPiece {
             bounding_box,
             orientation,
             gen_depth,
+            data: PieceData::None,
         }
+    }
+
+    /// Attaches placement data.
+    #[inline]
+    #[must_use]
+    pub fn with_data(mut self, data: PieceData) -> Self {
+        self.data = data;
+        self
     }
 
     /// Shifts this piece's bounding box by `(dx, dy, dz)`.
     #[inline]
     pub fn move_by(&mut self, dx: i32, dy: i32, dz: i32) {
         self.bounding_box = self.bounding_box.moved(dx, dy, dz);
+        self.data.shift(dx, dy, dz);
     }
 }
 
@@ -89,6 +102,8 @@ pub trait LegacyGenContext {
     }
     /// `chunkGenerator.getBaseColumn(x, z, ...)` (block state IDs from `noise_min_y` upward).
     fn base_column(&self, x: i32, z: i32) -> Vec<u32>;
+    /// `biome.coldEnoughToSnow(pos, seaLevel)` of the noise biome at `pos` (ruined portals).
+    fn cold_enough_to_snow(&mut self, pos: BlockPos) -> bool;
     /// Whether `state_id` is air (`state.isAir()`).
     fn is_air(&self, state_id: u32) -> bool;
     /// Whether `state_id` is `minecraft:soul_sand`.

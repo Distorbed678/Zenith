@@ -5,6 +5,8 @@ use zenith_math::{LegacyRandom, RandomSource};
 
 use crate::geom::{BlockPos, BoundingBox, BoundingBoxExt, Direction, random_horizontal_direction};
 use crate::legacy::{LegacyGenContext, LegacyPiece, has_collision, move_inside_heights};
+use crate::piece_data::PieceData;
+use crate::pieces::fortress::FortressPiece;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FortressKind {
@@ -154,6 +156,8 @@ struct FPiece {
     bb: BoundingBox,
     orient: Direction,
     gen_depth: i32,
+    /// `isNeedingChest` (0/1) for turns, `selfSeed` for end fillers.
+    extra: i32,
 }
 
 impl FPiece {
@@ -177,7 +181,13 @@ impl FPiece {
     }
 
     fn to_legacy(self) -> LegacyPiece {
-        LegacyPiece::new(self.piece_id(), self.bb, Some(self.orient), self.gen_depth)
+        LegacyPiece::new(self.piece_id(), self.bb, Some(self.orient), self.gen_depth).with_data(
+            PieceData::Fortress(FortressPiece {
+                id: self.piece_id(),
+                needs_chest: self.extra != 0,
+                self_seed: self.extra,
+            }),
+        )
     }
 }
 
@@ -211,6 +221,7 @@ pub fn generate(
         bb: start_bb,
         orient: dir,
         gen_depth: 0,
+        extra: 0,
     };
 
     let mut st = State {
@@ -287,20 +298,19 @@ fn create_piece(
     if !is_ok_box(bb) || has_collision(pieces, bb) {
         return None;
     }
-    match kind {
+    let extra = match kind {
         FortressKind::CastleSmallCorridorLeftTurn | FortressKind::CastleSmallCorridorRightTurn => {
-            let _is_needing_chest = rng.next_int_bounded(3) == 0;
+            i32::from(rng.next_int_bounded(3) == 0)
         }
-        FortressKind::BridgeEndFiller => {
-            let _self_seed = rng.next_int();
-        }
-        _ => {}
-    }
+        FortressKind::BridgeEndFiller => rng.next_int(),
+        _ => 0,
+    };
     Some(FPiece {
         kind,
         bb,
         orient: dir,
         gen_depth: depth,
+        extra,
     })
 }
 

@@ -20,5 +20,9 @@ zenith-biome = { path = "../zenith-biome" }
 zenith-blocks = { path = "../zenith-blocks" }
 zenith-worldgen = { path = "../zenith-worldgen" }
 
+[dev-dependencies]
+zenith-data = { path = "../zenith-data" }
+zenith-install = { path = "../zenith-install" }
+
 [lints]
 workspace = true
