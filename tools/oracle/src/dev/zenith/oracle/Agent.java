@@ -32,7 +32,8 @@ public final class Agent {
                 hooks);
 
         if (opts.containsKey("chunks")) {
-            Hooks.configureChunks(Path.of(opts.get("chunks")), Path.of(require(opts, "chunks_out")));
+            Hooks.configureChunks(Path.of(opts.get("chunks")), Path.of(require(opts, "chunks_out")),
+                    Integer.parseInt(opts.getOrDefault("chunks_extra", "0")));
         }
 
         inst.addTransformer(new TickTransformer(

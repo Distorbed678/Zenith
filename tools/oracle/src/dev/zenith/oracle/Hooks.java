@@ -20,12 +20,14 @@ public final class Hooks {
 
     private static Path chunkRequests;
     private static Path chunkOut;
+    private static int chunkExtras;
 
     private Hooks() {}
 
-    static synchronized void configureChunks(Path requests, Path out) {
+    static synchronized void configureChunks(Path requests, Path out, int extras) {
         chunkRequests = requests;
         chunkOut = out;
+        chunkExtras = extras;
     }
 
     static synchronized void configure(Path out, int ticks, long seed, String version, String scenario, Properties hooks)
@@ -46,7 +48,7 @@ public final class Hooks {
         }
         try {
             if (chunkRequests != null) {
-                ChunkDump.run(server, chunkRequests, chunkOut);
+                ChunkDump.run(server, chunkRequests, chunkOut, chunkExtras);
                 chunkRequests = null;
                 tickLimit = 0; // stop at the end of this tick
             }

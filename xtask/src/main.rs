@@ -230,6 +230,9 @@ enum OracleCmd {
         chunks: Vec<String>,
         #[arg(long, default_value = "terrain")]
         status: String,
+        /// Optional sections: bitmask 1 = light, 2 = block entities, 4 = entities.
+        #[arg(long, default_value_t = 0)]
+        extras: u8,
     },
     /// Compile the agent jar into tools/oracle/build/.
     Build {
@@ -360,8 +363,11 @@ fn main() -> ExitCode {
                     structures,
                     chunks,
                     status,
+                    extras,
                 },
-        } => oracle::chunks_command(&version, seed, level_type, structures, &chunks, &status),
+        } => oracle::chunks_command(
+            &version, seed, level_type, structures, &chunks, &status, extras,
+        ),
         Cmd::Oracle {
             cmd:
                 OracleCmd::Run {

@@ -298,6 +298,16 @@ pub fn dump_chunks(
     world: &ChunkWorld,
     requests: &[ChunkRequest],
 ) -> anyhow::Result<Vec<u8>> {
+    dump_chunks_with(version, world, requests, 0)
+}
+
+/// [`dump_chunks`] with optional sections (`EXTRA_*` bits); any bit makes the dump a `ZTC2` file.
+pub fn dump_chunks_with(
+    version: &str,
+    world: &ChunkWorld,
+    requests: &[ChunkRequest],
+    extras: u8,
+) -> anyhow::Result<Vec<u8>> {
     if !eula_accepted(false)? {
         bail!(
             "the vanilla server only starts after the Minecraft EULA (https://aka.ms/MinecraftEULA) is accepted; \
@@ -364,7 +374,7 @@ pub fn dump_chunks(
     );
     fs::write(&req_file, req)?;
     let agent_args = format!(
-        "out={},ticks=1,seed={},version={version},chunks={},chunks_out={}",
+        "out={},ticks=1,seed={},version={version},chunks={},chunks_out={},chunks_extra={extras}",
         dump.display(),
         world.seed,
         req_file.display(),
@@ -435,7 +445,29 @@ pub struct DumpedChunk {
     pub starts: Vec<DumpedStart>,
     /// Structure references: structure id → packed start-chunk positions (sorted).
     pub references: Vec<(String, Vec<i64>)>,
+    /// `ZTC2` light extra: per light section (bottom-up) its y and the block / sky nibble layers (2048 bytes) if present.
+    pub light: Option<Vec<LightSection>>,
+    /// `ZTC2` block-entity extra: position (x, y, z) and the saved NBT as network NBT bytes (`None` if none).
+    pub block_entities: Option<Vec<DumpedBlockEntity>>,
+    /// `ZTC2` entity extra: saved entity NBT in list order (network NBT bytes); `Some(None)` when the chunk keeps none.
+    pub entities: Option<Option<Vec<Vec<u8>>>>,
 }
+
+/// A block entity of a `ZTC2` dump: position (x, y, z) and its saved NBT (network NBT bytes), if any.
+pub type DumpedBlockEntity = ([i32; 3], Option<Vec<u8>>);
+
+/// One light section of a `ZTC2` dump.
+#[derive(Clone, Debug)]
+pub struct LightSection {
+    pub y: i32,
+    pub block: Option<Vec<u8>>,
+    pub sky: Option<Vec<u8>>,
+}
+
+/// Optional dump sections (agent `chunks_extra` bitmask).
+pub const EXTRA_LIGHT: u8 = 1;
+pub const EXTRA_BLOCK_ENTITIES: u8 = 2;
+pub const EXTRA_ENTITIES: u8 = 4;
 
 /// A structure start of a `ZTC1` dump.
 #[derive(Clone, Debug)]
@@ -497,8 +529,13 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
         }
     }
     let mut r = R(raw, 0);
-    ensure!(r.take(4)? == b"ZTC1", "not a ZTC1 dump");
+    let magic = r.take(4)?.to_vec();
+    ensure!(
+        magic == b"ZTC1" || magic == b"ZTC2",
+        "not a ZTC1 / ZTC2 dump"
+    );
     let n = r.i32()?;
+    let extras = if magic == b"ZTC2" { r.take(1)?[0] } else { 0 };
     let mut chunks = Vec::with_capacity(n.max(0) as usize);
     for _ in 0..n {
         let (dimension, x, z) = (r.str()?, r.i32()?, r.i32()?);
@@ -566,6 +603,58 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
                 .collect::<anyhow::Result<Vec<_>>>()?;
             references.push((id, longs));
         }
+        let light = if extras & EXTRA_LIGHT != 0 {
+            let mut v = Vec::new();
+            for _ in 0..r.i32()? {
+                let y = r.i32()?;
+                let block = if r.take(1)?[0] != 0 {
+                    Some(r.take(2048)?.to_vec())
+                } else {
+                    None
+                };
+                let sky = if r.take(1)?[0] != 0 {
+                    Some(r.take(2048)?.to_vec())
+                } else {
+                    None
+                };
+                v.push(LightSection { y, block, sky });
+            }
+            Some(v)
+        } else {
+            None
+        };
+        let nbt = |r: &mut R<'_>| -> anyhow::Result<Option<Vec<u8>>> {
+            let len = r.i32()?;
+            Ok(if len < 0 {
+                None
+            } else {
+                Some(r.take(len as usize)?.to_vec())
+            })
+        };
+        let block_entities = if extras & EXTRA_BLOCK_ENTITIES != 0 {
+            let mut v = Vec::new();
+            for _ in 0..r.i32()? {
+                let pos = [r.i32()?, r.i32()?, r.i32()?];
+                v.push((pos, nbt(&mut r)?));
+            }
+            Some(v)
+        } else {
+            None
+        };
+        let entities = if extras & EXTRA_ENTITIES != 0 {
+            let count = r.i32()?;
+            if count < 0 {
+                Some(None)
+            } else {
+                let mut v = Vec::new();
+                for _ in 0..count {
+                    v.push(nbt(&mut r)?.unwrap_or_default());
+                }
+                Some(Some(v))
+            }
+        } else {
+            None
+        };
         chunks.push(DumpedChunk {
             dimension,
             x,
@@ -582,6 +671,9 @@ pub fn parse_chunk_dump(raw: &[u8]) -> anyhow::Result<Vec<DumpedChunk>> {
             fluid_ticks,
             starts,
             references,
+            light,
+            block_entities,
+            entities,
         });
     }
     ensure!(r.1 == raw.len(), "trailing bytes in ZTC1 dump");
@@ -596,6 +688,7 @@ pub fn chunks_command(
     structures: bool,
     specs: &[String],
     status: &str,
+    extras: u8,
 ) -> anyhow::Result<bool> {
     let mut requests = Vec::new();
     for s in specs {
@@ -616,7 +709,7 @@ pub fn chunks_command(
         structures,
     };
     let started = Instant::now();
-    let chunks = parse_chunk_dump(&dump_chunks(version, &world, &requests)?)?;
+    let chunks = parse_chunk_dump(&dump_chunks_with(version, &world, &requests, extras)?)?;
     let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
         .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
     let table = zenith_registry::block_state::BlockStateTable::from_tables(&tables)
@@ -687,6 +780,37 @@ pub fn chunks_command(
                         p.kind, p.bounds, p.orientation, p.depth
                     )
                 )
+            );
+        }
+        if let Some(light) = &c.light {
+            let block = light.iter().filter(|l| l.block.is_some()).count();
+            let sky = light.iter().filter(|l| l.sky.is_some()).count();
+            let max_block = light
+                .iter()
+                .filter_map(|l| l.block.as_ref())
+                .flat_map(|d| d.iter().flat_map(|x| [x & 15, x >> 4]))
+                .max();
+            println!(
+                "  light: sections y {}..={}, {block} block layers (max {max_block:?}), {sky} sky layers",
+                light.first().map_or(0, |l| l.y),
+                light.last().map_or(0, |l| l.y)
+            );
+        }
+        if let Some(be) = &c.block_entities {
+            println!(
+                "  block entities: {}{}",
+                be.len(),
+                be.first().map_or(String::new(), |(p, n)| format!(
+                    ", first at {p:?} ({} NBT bytes)",
+                    n.as_ref().map_or(0, Vec::len)
+                ))
+            );
+        }
+        if let Some(e) = &c.entities {
+            println!(
+                "  entities: {}",
+                e.as_ref()
+                    .map_or_else(|| "kept by the level".to_owned(), |v| v.len().to_string())
             );
         }
         if !c.references.is_empty() {

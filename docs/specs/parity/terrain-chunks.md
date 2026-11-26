@@ -107,6 +107,32 @@ Notes:
   `OCEAN_FLOOR`, `OCEAN_FLOOR_WG`, `WORLD_SURFACE`, `WORLD_SURFACE_WG`).
 - The world folder (game-generated data) is deleted by the Rust side after reading; nothing is kept in the repo.
 
+## Optional sections (`ZTC2`)
+
+Agent argument `chunks_extra=<bitmask>` (xtask `oracle::dump_chunks_with`, `cargo xtask oracle chunks --extras N`)
+adds sections; with any bit set the file starts with `ZTC2` and a `u8` copy of the bitmask follows the chunk count.
+Each chunk record then ends, after the references section, with the selected sections in bit order:
+
+```text
+// bit 1 — light (useful at status "light" / "full"):
+light_section_count : i32                 // from the level's min to max light section (one beyond the chunk each side)
+light_sections[...] : {
+    y        : i32                        // section y
+    block    : u8 present, [u8; 2048] if present   // raw nibble array (low nibble = even index)
+    sky      : u8 present, [u8; 2048] if present
+}
+// bit 2 — block entities, sorted by (y, z, x):
+count       : i32
+entries[count] : { x: i32, y: i32, z: i32, nbt_len: i32 (-1 = none), nbt[nbt_len] }   // network NBT (type byte + payload)
+// bit 4 — entities held by a proto chunk, in list order:
+count       : i32                         // -1: the chunk keeps none (a full chunk; entities live in the level)
+entries[count] : { nbt_len: i32, nbt[nbt_len] }
+```
+
+Self-check (2026-11-26, seed 12345, structures on): full overworld chunks report light sections −5…20 with block light up
+to 15; a nether chunk has block layers and no sky layers; a mineshaft area at `features` holds spawner block entities
+and chest-minecart entities.
+
 ## Structure starts and references
 
 Every chunk record ends with the chunk's structure starts and references, so structure placement can be verified on
