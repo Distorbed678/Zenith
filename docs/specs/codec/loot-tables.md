@@ -270,7 +270,7 @@ present adds `luck = player.luck` and `this_entity = player`; parameter set `che
    `minecraft:chests/simple_dungeon` with several seeds/salts; compare with §5.2.
 4. Item/entity/block/location/damage-source **predicates** (`item_filter`, `match_tool`, `entity_properties`,
    `location_check`, `damage_source_properties`, `match_block`) and data-component *predicates* are shared with
-   advancements and are **not specified here**; they need their own predicate spec.
+   advancements and are **not specified here**: see `codec/predicates/` (README indexes every predicate type).
 5. Recipes (`furnace_smelt`), structure search (`exploration_map`), text-component resolution (`set_name`/`set_lore`
    with `entity`), command storage (`storage` providers), scoreboard (`score`, `entity_scores`) depend on other specs.
 6. Float edge cases: `Math.round(float)`, `Mth.sin/cos`, `Math.pow` use host precision; see `math/java-math-helpers.md`.

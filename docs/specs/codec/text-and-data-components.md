@@ -721,7 +721,7 @@ The `text-component` suite does not test tags yet: its built-in lookup has no da
     `can_place_on` / `can_break` hold one block predicate or a non-empty list of them, and a block predicate's
     `blocks` field is a **block holder set** (checked against `minecraft:block`); `lock` holds an item predicate whose
     `items` field is an item holder set (checked against `minecraft:item`). Both predicate schemas (block state,
-    NBT and component matchers) belong to a future predicate spec; until then they stay raw maps, a known gap with
+    NBT and component matchers) are specified in `codec/predicates/block-fluid-location.md` (adventure-mode predicate, `lock`); until implemented they stay raw maps, a known gap with
     its own tracker item.
 
 ## Reader review (2026-11-25)

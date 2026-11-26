@@ -126,6 +126,8 @@ attribute's value codec (range-validated).
 
 ## Open questions
 - Entity/Item/Block/Location/DamageSource predicate specs (advancement criteria shapes) are needed to implement
+  **Now specified** in `codec/predicates/` (2026-11-26): `entity.md`, `item-and-components.md`, `block-fluid-location.md`,
+  `damage-and-misc.md`, `bounds-and-basics.md`.
   `entity_properties`, `match_tool`, `match_block`, `location_check`, `damage_source_properties`, and `item_filter`s.
 - **[oracle]** `EnchantmentHelper.getEnchantmentLevel(Holder<Enchantment>, LivingEntity)` slot iteration for entities
   whose `getSlotItems` includes body/saddle slots (the lookup uses only slots matching the enchantment's `slots` field).
