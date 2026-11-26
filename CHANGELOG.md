@@ -1,0 +1,77 @@
+# Changelog
+
+## [0.0.2](https://github.com/Distorbed678/Zenith/compare/v0.0.1...v0.0.2) (2026-11-26)
+
+
+### Features
+
+* **biome:** M7 zenith-biome — climate, biome sources, 19-way R-tree, presets, zoom (clean-room) ([cff9aca](https://github.com/Distorbed678/Zenith/commit/cff9aca0c34a5bd28661da983c1b4abf426117ca))
+* **blocks:** state rotation / mirroring table; block-transforms 428,676/428,676 ([61da9f0](https://github.com/Distorbed678/Zenith/commit/61da9f04f4ae9109a285a4d35412aa1ae28f1394))
+* **blocks:** zenith-blocks — voxel shapes + per-state facts; block-facts 535,845/535,845 ([9baad17](https://github.com/Distorbed678/Zenith/commit/9baad17491a4c55ae66659dcfa20f05ccd81319b))
+* **codec:** M5 zenith-codec — data packs, pack metadata, lookup, codecs (clean-room) ([edea780](https://github.com/Distorbed678/Zenith/commit/edea7802c8a5f6525c4b0edeafd002dc2d08a34b))
+* **components:** M5 zenith-components — text & item data components (clean-room) ([c9fff2f](https://github.com/Distorbed678/Zenith/commit/c9fff2f91e3a4909ef3d49d2ad1668d9ad76b71c))
+* **features:** M8 zenith-features — features step, 58 feature types, trees; golden-features 1,800/1,800, java-hashset ([8323d0e](https://github.com/Distorbed678/Zenith/commit/8323d0eb0b2f8888a32e505930f64f21b48ac429))
+* **features:** structures in the features step, fossils / templates; golden-structures 16,737/17,150 ([95bffb0](https://github.com/Distorbed678/Zenith/commit/95bffb03ba8cf596f1258ef8a9050a9e819ab588))
+* foundation for Zenith (plan, ownership proof, tracker, guard) ([25103c8](https://github.com/Distorbed678/Zenith/commit/25103c8bba8c71648a7bc16b079a678b4e8ba361))
+* **light:** M9 zenith-light — block + sky light engines, light chunk steps (clean-room) ([79475fa](https://github.com/Distorbed678/Zenith/commit/79475faf47417c1f642b8a872107b0015a974ea8))
+* **math:** M6 Java-exact math helpers (clean-room) ([6dac8a3](https://github.com/Distorbed678/Zenith/commit/6dac8a3a90605f528eb2fa0545b191db4cd25aa0))
+* **math:** M6 noise (clean-room) — 48,300/48,300 floats identical to vanilla ([31e6cab](https://github.com/Distorbed678/Zenith/commit/31e6cabfc8bb9a37aff1a44c1cb464e9fde74d39))
+* **math:** M6 random sources (clean-room) + noise behavior spec ([29390a7](https://github.com/Distorbed678/Zenith/commit/29390a755734480873ab1045be940774abade6fb))
+* **nbt:** M2 zenith-nbt — 100% byte parity with vanilla's own re-save and SNBT text ([876b1ba](https://github.com/Distorbed678/Zenith/commit/876b1bae52097ef96e05e6ad2e3bf7eb6bd96f5e))
+* **oracle:** BlockFacts — every block state's static facts (ZBF1) ([375dfd8](https://github.com/Distorbed678/Zenith/commit/375dfd8c45eca72ee92cc180b5359b16eff3ae22))
+* **oracle:** chunk dump records structure starts and references ([1090b4e](https://github.com/Distorbed678/Zenith/commit/1090b4e4d66b248348dda9dfcb36f533cc065ed0))
+* **oracle:** full-chunk dump (ZTC1) from the vanilla server for golden-terrain ([8c9e31c](https://github.com/Distorbed678/Zenith/commit/8c9e31c85663d591aba3121c25bd658628c98f2d))
+* **oracle:** M10 scenario runner (ZSC1 / ZSO1) — scripted block changes, pinned RNG, per-tick dumps ([d19708c](https://github.com/Distorbed678/Zenith/commit/d19708cf72b36f56f4a95079bb9ec2325b5055fc))
+* **oracle:** optional chunk-dump sections (ZTC2) — light layers, block entities, entities ([e58724a](https://github.com/Distorbed678/Zenith/commit/e58724a8ab5d40a24e04d658e9a74807482f5826))
+* **oracle:** TerrainProbe — router, router-volume, climate, biome, column dumps (ZTP1) ([fafa201](https://github.com/Distorbed678/Zenith/commit/fafa2013c8448073124a1f09c105353582b07606))
+* **parity:** anvil-io — Zenith region files byte-identical to vanilla's (48/48) ([4406deb](https://github.com/Distorbed678/Zenith/commit/4406debf8ecc873cc4b6e02d614dd06c1a044bf0))
+* **parity:** datapack-load stage 1 — JSON layer 15,962/15,964 vs vanilla ([daa402a](https://github.com/Distorbed678/Zenith/commit/daa402ae0d3bd2fc2957253d38a817f562068ee8))
+* **parity:** M1 parity harness and data-gen ingestion ([f303981](https://github.com/Distorbed678/Zenith/commit/f3039818f25c018d6ad0dc88c986d438c5582c94))
+* **parity:** math-helpers suite + synthetic NBT edge cases; M6 complete ([9491ab2](https://github.com/Distorbed678/Zenith/commit/9491ab277868c894f9729b7c83c14910499cf105))
+* **parity:** rng-streams suite — 38,594/38,594 values identical to vanilla ([44082b7](https://github.com/Distorbed678/Zenith/commit/44082b73c317e6185f0d8f4d4765a7fd5e98959d))
+* **parity:** text-component suite (17,934/19,178) + spec findings ([85a403e](https://github.com/Distorbed678/Zenith/commit/85a403e1e34041a88ee8a49edda99fbc29de5c8f))
+* **registry:** M4 zenith-registry (clean-room) — blockstate-ids 35,723/35,723 ([39cd2d6](https://github.com/Distorbed678/Zenith/commit/39cd2d654eff246c5db4f4a4be8e59036d39adf4))
+* **storage:** M3 zenith-storage (clean-room) ([de5d853](https://github.com/Distorbed678/Zenith/commit/de5d853e749eef15bf009bc5f23945d339ca4b7e))
+* **structures:** M8 zenith-structures + beardifier; M7 done; structure-starts 828/828, golden-terrain-structures ([33026f4](https://github.com/Distorbed678/Zenith/commit/33026f495f4368bdf9e0e1be20106d43e8a720e0))
+* **structures:** piece block placement (StructureWorld) + spec: Java HashMap tree-bin order ([43a9b6a](https://github.com/Distorbed678/Zenith/commit/43a9b6a208d45e513c7dec6c8ebe10aac2af18ae))
+* **web:** pixel-crafted website and shared @zenith/ui design system ([35d6fae](https://github.com/Distorbed678/Zenith/commit/35d6fae73985db5cc4180aa5d68cb3688e69bee6))
+* **worldgen:** full 26.3 terrain step + golden-terrain 1,320/1,320 ([8893110](https://github.com/Distorbed678/Zenith/commit/8893110a862a4acfe48c8d8f6c87cb94f79056da))
+* **worldgen:** M7 zenith-worldgen + worldgen-router 30,063/30,063, worldgen-biomes 29,409/29,409 ([8a6c443](https://github.com/Distorbed678/Zenith/commit/8a6c443462b2b7a690f0c7a1f4b0c34185f1c30e))
+* **worldgen:** noise chunk, terrain fill, aquifers + worldgen-columns 2,562/2,562 ([04accb5](https://github.com/Distorbed678/Zenith/commit/04accb523cdb5f6f266f1dafd427d5a23e9831c7))
+
+
+### Fixes
+
+* **components:** text-component parity 19,176/19,178 + M7 terrain specs ([33ad1fb](https://github.com/Distorbed678/Zenith/commit/33ad1fb1037425707d7eff4951e4c2944e9944f3))
+* **oracle:** build the agent jar in a private folder and rename it into place ([0af7f5e](https://github.com/Distorbed678/Zenith/commit/0af7f5ee802f188233d488e7f1e63c6204b76a16))
+* **worldgen:** neighbour biomes from each chunk's own climate volume; golden-terrain 58,540/58,540 at scale ([a4b8ce6](https://github.com/Distorbed678/Zenith/commit/a4b8ce64e7adb2823a27e617a7fbc71db83114ed))
+* **xtask:** clippy (as_chunks; allow deliberate 3.14159 probe input) ([fabd8dc](https://github.com/Distorbed678/Zenith/commit/fabd8dc23700a99292c7316bd3ab196dbaef3369))
+* **xtask:** use as_chunks for fixed-size reads (clippy) ([3337e8a](https://github.com/Distorbed678/Zenith/commit/3337e8a46d694c283449cb4342b2ba612f670862))
+
+
+### Docs
+
+* **adr:** 0009 per-block-state static facts are specified and reimplemented, proven by block-facts over every state ([0de90ff](https://github.com/Distorbed678/Zenith/commit/0de90ffd5846ba53e126582082d5d53412942847))
+* log answer 12.1 (Gemini quota fallback to Claude subagents) in USER-ANSWERS and CLAUDE.md ([3879209](https://github.com/Distorbed678/Zenith/commit/38792094be5cfc4487fb015757dc717fc09fedd7))
+* owner decision 11.1 (fix security weaknesses with a warning) + deviations register; zenith-codec skeleton ([a07ab72](https://github.com/Distorbed678/Zenith/commit/a07ab72432f45c4d8710991c2fb5c4e7f9cd3d9a))
+* owner instruction S.6 — use Claude subagents (Antigravity quota low) ([07fe00c](https://github.com/Distorbed678/Zenith/commit/07fe00c733a768f2ce045e0fcf6955e136f4bce6))
+* **progress:** complete M0 foundation ([09e8a1d](https://github.com/Distorbed678/Zenith/commit/09e8a1dd4cae388f5663de820aeea553eba84fae))
+* **progress:** M2 (NBT) and M6 (RNG/noise) in progress ([97125ac](https://github.com/Distorbed678/Zenith/commit/97125ac8b3c73085bc2df7758b6da98365bd0299))
+* **spec:** answer implementer question 15 (resource keys vs checked holders) ([49dc1a3](https://github.com/Distorbed678/Zenith/commit/49dc1a364675803035109c20c53c853dc718592b))
+* **spec:** blocks — shape model, shape catalogue, per-state facts, block table, sound types ([b8a0e3c](https://github.com/Distorbed678/Zenith/commit/b8a0e3cb5f3fc5f1a5c77b78f1d9b200dc1b8c31))
+* **spec:** environment attributes + loot tables (26.3 data-driven systems) ([8f2d811](https://github.com/Distorbed678/Zenith/commit/8f2d8113eff37fd82ae65368a3dc20bc610d12b5))
+* **spec:** M10 core — server tick order, scheduled ticks + block events, set-block flags, neighbor + shape updates, block hooks ([94938c5](https://github.com/Distorbed678/Zenith/commit/94938c5eb5246c4f151cfdca5ab28db435988756))
+* **spec:** M10 fluids — flowing fluid algorithm, water / lava specifics, waterlogging, bubble columns ([7d8a124](https://github.com/Distorbed678/Zenith/commit/7d8a12405084fbeba100e8b3d49306aea965fd34))
+* **spec:** M10 per-block reactions — survival, plants, connections, multi-block, rails, misc ([016ba8b](https://github.com/Distorbed678/Zenith/commit/016ba8bdf1deffb76057ee11d7339eb30e70a2cb))
+* **spec:** M10 per-block timed behaviour — growth, spread, decay / weathering, fire, gravity and misc ([6d9d0f4](https://github.com/Distorbed678/Zenith/commit/6d9d0f456338b8f817831e4f873a525287e3f999))
+* **spec:** M10 redstone — power model, wire, components, pistons ([8be3acd](https://github.com/Distorbed678/Zenith/commit/8be3acd230ee632e6f7aa6a1dfc478e493e6b360))
+* **spec:** M8 reader specs — features, trees, structure placement + jigsaw, legacy structures ([6a885e1](https://github.com/Distorbed678/Zenith/commit/6a885e1e0d204fafa92aea642f59b31bb84ac09e))
+* **spec:** M9 lighting — data layers, block + sky light engines, sky light sources, chunk light steps ([3b2eaa3](https://github.com/Distorbed678/Zenith/commit/3b2eaa390c368f76c3f406e0b4bac6515a8d9bc3))
+* **spec:** predicates — bounds, NBT, block / fluid / light / location, item + component predicates, entity, damage source ([da20a2f](https://github.com/Distorbed678/Zenith/commit/da20a2fd68b36e25d5af5a16f21567f2cc935edc))
+* **specs:** data packs, pack metadata & codecs behavior spec (M5, part A) ([b3f48f4](https://github.com/Distorbed678/Zenith/commit/b3f48f4b8127d58cf51f9e5c0b80dbc4175559a5))
+* **specs:** identifiers, registries & tags behavior spec (M4) ([6715127](https://github.com/Distorbed678/Zenith/commit/6715127ec1e020b94d8cb7b4995d9a8cd478abc5))
+* **specs:** Java-exact math helpers behavior spec (M6) ([2d7bfa1](https://github.com/Distorbed678/Zenith/commit/2d7bfa169a040e7421817712529c768bf2bd674c))
+* **specs:** NBT binary format + SNBT behavior specs; log EULA decision ([762b471](https://github.com/Distorbed678/Zenith/commit/762b47186d34bde3ebb128092df7f6ffb1821f72))
+* **specs:** random number sources spec (M6, part 1) ([c3ce6fe](https://github.com/Distorbed678/Zenith/commit/c3ce6fe66b789059044f0e831575fb66bb7e042a))
+* **specs:** region files & level data behavior spec (M3) ([55cce0e](https://github.com/Distorbed678/Zenith/commit/55cce0ec70ea8ebda29311ba676813040a1e1464))
+* **specs:** text components & item data components behavior spec (M5, part B) ([cd8a200](https://github.com/Distorbed678/Zenith/commit/cd8a2000e51a8b593b7e969c558f9f4f46f85fdd))
