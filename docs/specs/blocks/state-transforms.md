@@ -594,9 +594,9 @@ Spot checks (values read from the game, usable as unit tests):
 
 ## Open questions
 
-1. **[oracle] Whole-table equality.** The `block-transforms` suite compares all 35,723 × 12 results with Zenith's rule
-   application. The rules above were already checked against an independent re-implementation of this spec for every
-   state, with no differences; the suite re-proves them against the Rust code.
+1. **[oracle] Whole-table equality.** *Resolved:* the `block-transforms` suite compares all 35,723 × 12 results with
+   Zenith's rule application (`zenith-blocks` `BlockTransforms`) and passes 428,676 / 428,676 checks, with no
+   difference in any of the ten rules, so §2–§6 and the Appendix are complete for 26.3.
 2. **[oracle] Multi-face flags.** The multi-face rule has "can rotate / can mirror" guards that depend on which of the six
    faces a block supports; glow lichen, resin clump and sculk vein all support all six, so the guards never trigger in
    26.3. A later multi-face block that omits a horizontal face would behave differently (no rotation; mirror only when
@@ -608,8 +608,12 @@ Spot checks (values read from the game, usable as unit tests):
 4. **[oracle] Processor interaction.** Item 1 of §5 says processors run on the untransformed state and mirror+rotate act
    on their output. This is about call order in the placement code; only the structure suites with processors that
    replace blocks (jigsaw final-state, rules processors) can confirm it end to end.
-5. **(implementer)** Zenith should expose the table directly (indexed by state id and `mirror × 4 + rotation`) or
-   compute it from §2–§6 and verify against the table; both are exactly equivalent.
+5. **(implementer)** *Done:* Zenith computes the table from §2–§6 at start-up (rule per block from the Appendix, which
+   is embedded and parsed at compile time) and keeps flat arrays; `rotate`, `mirror` and `transform` (mirror, then
+   rotate) are array reads. A block that the Appendix does not list makes the build fail instead of silently being
+   treated as T0, so a later game version must extend the Appendix before it can be loaded.
 
 ## Parity status
-`block-transforms`: not yet run.
+`block-transforms` (2026-11-25): **428,676/428,676** — every state of 26.3 under all 12 mirror × rotation
+combinations identical to the game; the per-combination changed-state counts equal §7's. Placement call order (§5)
+and processor interaction are verified by the structure suites.

@@ -3,6 +3,7 @@
 //! - [`shape`]: the voxel-shape model ([`VoxelShape`]): boxes in the spec's canonical order, joins, rotations, face
 //!   shapes, sturdiness. It is independent of block data and reusable by collision / lighting code.
 //! - [`table`]: the per-block table (class, shape family, colours, sounds, flags) parsed from the spec documents.
+//! - [`BlockTransforms`]: the rotation / mirror table of every block state.
 //! - [`BlockFacts`]: built from a `BlockStateTable` and the block tags, it holds every fact and shape per state.
 //!
 //! # Example
@@ -17,6 +18,7 @@ mod facts;
 mod families;
 pub mod shape;
 pub mod table;
+mod transform;
 
 pub use facts::{
     BlockFactTags, BlockFacts, BlockMeta, FluidKind, FluidState, ShapeId, ShapeKind, StateFacts,
@@ -24,6 +26,7 @@ pub use facts::{
 };
 pub use shape::{Aabb, BoolOp, Direction, SupportType, Transform, VoxelShape};
 pub use table::OffsetType;
+pub use transform::{BlockTransforms, Mirror, Rotation, TransformRule};
 
 use thiserror::Error;
 

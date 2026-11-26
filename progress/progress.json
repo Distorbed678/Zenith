@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-26T01:35:30Z",
+  "generatedAt": "2026-11-26T01:47:11Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 21.3,
-    "parityPercent": 48.7,
+    "percent": 21.6,
+    "parityPercent": 50.0,
     "milestonesDone": 4,
     "milestonesTotal": 33,
-    "suitesPassing": 18,
-    "suitesTotal": 39
+    "suitesPassing": 19,
+    "suitesTotal": 40
   },
   "phases": [
     {
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 27.4,
+      "percent": 28.2,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -551,8 +551,8 @@
       "title": "Features & structures",
       "status": "in-progress",
       "weight": 7.0,
-      "percent": 76.7,
-      "tasksDone": 7,
+      "percent": 82.9,
+      "tasksDone": 8,
       "tasksTotal": 10,
       "tasks": [
         {
@@ -565,7 +565,7 @@
         },
         {
           "title": "Block state rotation / mirroring (block-transforms)",
-          "done": false
+          "done": true
         },
         {
           "title": "Block shapes + per-state static facts (ADR 0009)",
@@ -603,6 +603,13 @@
           "total": 535845,
           "percent": 100.0,
           "updatedAt": "2026-11-25"
+        },
+        {
+          "id": "block-transforms",
+          "passed": 428676,
+          "total": 428676,
+          "percent": 100.0,
+          "updatedAt": "2026-11-26"
         },
         {
           "id": "java-hashset",
@@ -1457,8 +1464,8 @@
     },
     {
       "date": "2026-11-26",
-      "percent": 21.3,
-      "parityPercent": 48.7
+      "percent": 21.6,
+      "parityPercent": 50.0
     }
   ]
 }

@@ -160,6 +160,16 @@ enum ParityCmd {
         #[arg(long)]
         only: Option<String>,
     },
+    /// Rotation and mirror of every block state (12 combinations x 35,723 in 26.3) vs the game's own (ADR 0009).
+    BlockTransforms {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+        /// How many failing checks to print.
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+    },
     /// Compare zenith-math's noise generators with vanilla's at fixed sample points.
     NoiseSamples {
         #[arg(long, default_value = "26.3")]
@@ -301,6 +311,14 @@ fn main() -> ExitCode {
                     only,
                 },
         } => parity_blocks::block_facts(&version, write, limit, only.as_deref()),
+        Cmd::Parity {
+            cmd:
+                ParityCmd::BlockTransforms {
+                    version,
+                    write,
+                    limit,
+                },
+        } => parity_blocks::block_transforms(&version, write, limit),
         Cmd::Parity {
             cmd: ParityCmd::NoiseSamples { version, write },
         } => parity::noise_samples(&version, write),

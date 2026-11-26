@@ -197,11 +197,11 @@ phase = "P2"
 title = "Features & structures"
 weight = 7
 status = "in-progress"
-suites = ["block-facts", "java-hashset", "structure-starts", "golden-terrain-structures", "golden-features", "golden-structures"]
+suites = ["block-facts", "block-transforms", "java-hashset", "structure-starts", "golden-terrain-structures", "golden-features", "golden-structures"]
 tasks = [
   { t = "Trees (all placers + decorators) and Java HashSet order incl. tree bins", done = true },
   { t = "Structure piece placement in the features step (golden-structures)", done = false },
-  { t = "Block state rotation / mirroring (block-transforms)", done = false },
+  { t = "Block state rotation / mirroring (block-transforms)", done = true },
   { t = "Block shapes + per-state static facts (ADR 0009)", done = true },
   { t = "Configured/placed features + placement modifiers", done = true },
   { t = "Decoration step ordering", done = true },

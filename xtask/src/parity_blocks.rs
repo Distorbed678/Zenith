@@ -9,8 +9,8 @@ use std::fs;
 
 use anyhow::{Context, bail};
 use zenith_blocks::{
-    BlockFactTags, BlockFacts, Direction, OffsetType, ShapeKind, SupportType, VoxelShape, flag,
-    table::Tables,
+    BlockFactTags, BlockFacts, BlockTransforms, Direction, Mirror, OffsetType, Rotation, ShapeKind,
+    SupportType, TransformRule, VoxelShape, flag, table::Tables,
 };
 use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
@@ -720,6 +720,192 @@ pub fn block_facts(
     }
     if write {
         SuiteResult::new("block-facts", version, passed, count)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(passed == count)
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// block-transforms: rotation and mirror of every block state (docs/specs/blocks/state-transforms.md, ZBT1).
+// ---------------------------------------------------------------------------------------------------------------
+
+/// One state's dumped results: `result[mirror * 4 + rotation]`.
+struct TransformRec {
+    id: u32,
+    result: [u32; 12],
+}
+
+/// Decodes a `ZBT1` dump (`docs/specs/parity/block-transforms.md`), consuming the file exactly.
+fn parse_transform_dump(raw: &[u8]) -> anyhow::Result<(u32, Vec<TransformRec>)> {
+    const HEADER: usize = 18;
+    const RECORD: usize = 52;
+    anyhow::ensure!(raw.len() >= HEADER, "ZBT1 dump shorter than its header");
+    anyhow::ensure!(&raw[..4] == b"ZBT1", "bad ZBT1 magic");
+    let u16_at = |at: usize| u16::from_be_bytes([raw[at], raw[at + 1]]);
+    let u32_at = |at: usize| u32::from_be_bytes([raw[at], raw[at + 1], raw[at + 2], raw[at + 3]]);
+    anyhow::ensure!(u16_at(4) == 1, "unsupported ZBT1 version {}", u16_at(4));
+    let total = u32_at(6);
+    let start = u32_at(10);
+    let count = u32_at(14) as usize;
+    anyhow::ensure!(
+        raw.len() == HEADER + RECORD * count,
+        "ZBT1 size {} does not match {count} records",
+        raw.len()
+    );
+    let mut recs = Vec::with_capacity(count);
+    for i in 0..count {
+        let at = HEADER + RECORD * i;
+        let id = u32_at(at);
+        anyhow::ensure!(
+            id == start + i as u32,
+            "ZBT1 record {i} has id {id}, expected {}",
+            start + i as u32
+        );
+        let mut result = [0u32; 12];
+        for (k, r) in result.iter_mut().enumerate() {
+            *r = u32_at(at + 4 + 4 * k);
+        }
+        recs.push(TransformRec { id, result });
+    }
+    Ok((total, recs))
+}
+
+fn run_vanilla_transforms(version: &str) -> anyhow::Result<Vec<u8>> {
+    let (install, java) = crate::oracle::install_and_java(version)?;
+    let agent = crate::oracle::build(version)?;
+    let mut cp = zenith_install::libraries::game_classpath(&install)?;
+    cp.push(agent);
+    let dir = zenith_install::cache_dir().join("parity/block-transforms");
+    fs::create_dir_all(&dir)?;
+    let out_file = dir.join("block-transforms.zbt1");
+    let out = vanilla_command(&java.java)?
+        .arg("-Xmx2G")
+        .arg("-cp")
+        .arg(zenith_install::libraries::join_classpath(&cp))
+        .arg("dev.zenith.oracle.BlockTransforms")
+        .arg(&out_file)
+        .output()
+        .context("run vanilla block transforms")?;
+    anyhow::ensure!(
+        out.status.success(),
+        "vanilla block transforms failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let raw = fs::read(&out_file)?;
+    let _ = fs::remove_file(&out_file); // game data: never keep it
+    Ok(raw)
+}
+
+fn build_block_table(version: &str) -> anyhow::Result<BlockStateTable> {
+    let tables = zenith_data::Tables::load(&zenith_data::version_dir(version).join("tables.bin"))
+        .context("no cached tables; run `cargo run -p zenith-data -- ingest` first")?;
+    BlockStateTable::from_tables(&tables)
+        .map_err(|e| anyhow::anyhow!("build block-state table: {e}"))
+}
+
+fn describe_state(blocks: &BlockStateTable, id: u32) -> String {
+    match blocks.state_by_id_exact(id as i32) {
+        Some(s) => {
+            let props: Vec<String> = s
+                .properties
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            format!("{}[{}] (#{id})", s.block_id, props.join(","))
+        }
+        None => format!("<unregistered #{id}>"),
+    }
+}
+
+/// `block-transforms`: the 12 (mirror, rotation) results of every state from the game vs `zenith-blocks`.
+pub fn block_transforms(version: &str, write: bool, limit: usize) -> anyhow::Result<bool> {
+    let blocks = build_block_table(version)?;
+    let transforms = BlockTransforms::build(&blocks)
+        .map_err(|e| anyhow::anyhow!("build block transforms: {e}"))?;
+    let raw = run_vanilla_transforms(version)?;
+    let (total, vanilla) = parse_transform_dump(&raw)?;
+    drop(raw);
+    if total as usize != blocks.len() || vanilla.len() != blocks.len() {
+        bail!(
+            "state count: vanilla dumped {} of {total}, zenith has {}",
+            vanilla.len(),
+            blocks.len()
+        );
+    }
+    let label = |col: usize| {
+        format!(
+            "{}+{}",
+            Mirror::ALL[col / 4].name(),
+            Rotation::ALL[col % 4].name()
+        )
+    };
+    let mut col_ok = [0u64; 12];
+    let mut col_fail = [0u64; 12];
+    let mut rule_fail: BTreeMap<String, u64> = BTreeMap::new();
+    let mut rule_checks: BTreeMap<String, u64> = BTreeMap::new();
+    let mut changed = [0u64; 12];
+    let mut failures: Vec<String> = Vec::new();
+    for rec in &vanilla {
+        let state = blocks
+            .state_by_id_exact(rec.id as i32)
+            .context("dump id outside the table")?;
+        let rule = TransformRule::of_block(state.block_id.path())
+            .map_or_else(|| "none".to_owned(), |r| format!("T{}", r.number()));
+        for (col, &want) in rec.result.iter().enumerate() {
+            let (m, r) = (Mirror::ALL[col / 4], Rotation::ALL[col % 4]);
+            let got = transforms.transform(rec.id, m, r);
+            *rule_checks.entry(rule.clone()).or_default() += 1;
+            if want != rec.id {
+                changed[col] += 1;
+            }
+            if got == want {
+                col_ok[col] += 1;
+                continue;
+            }
+            col_fail[col] += 1;
+            *rule_fail.entry(rule.clone()).or_default() += 1;
+            if failures.len() < limit {
+                failures.push(format!(
+                    "FAIL [{rule}] {} {}: vanilla {} | zenith {}",
+                    describe_state(&blocks, rec.id),
+                    label(col),
+                    describe_state(&blocks, want),
+                    describe_state(&blocks, got)
+                ));
+            }
+        }
+    }
+    let passed: u64 = col_ok.iter().sum();
+    let count: u64 = passed + col_fail.iter().sum::<u64>();
+    println!(
+        "vanilla dump: {} states; states changed: {}",
+        vanilla.len(),
+        (1..12)
+            .map(|c| format!("{}={}", label(c), changed[c]))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    println!("block-transforms {version}: {} states", blocks.len());
+    for col in 0..12 {
+        println!(
+            "  {:<34} {}/{}",
+            label(col),
+            col_ok[col],
+            col_ok[col] + col_fail[col]
+        );
+    }
+    println!("block-transforms {version}: {passed}/{count} checks");
+    if !rule_fail.is_empty() {
+        println!("failures per rule:");
+        for (rule, n) in &rule_fail {
+            println!("  {rule:<6} {n} of {}", rule_checks[rule]);
+        }
+    }
+    for f in &failures {
+        println!("  {f}");
+    }
+    if write {
+        SuiteResult::new("block-transforms", version, passed, count)
             .write(&repo_root().join("progress/parity"))?;
     }
     Ok(passed == count)
