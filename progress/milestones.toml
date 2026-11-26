@@ -102,6 +102,7 @@ weight = 2
 status = "in-progress"
 suites = ["nbt-roundtrip", "snbt-format"]
 tasks = [
+  { t = "Compound key order with Java tree bins (reuse the java-hashset emulation)", done = false },
   { t = "Binary NBT read/write (file + network variants)", done = true },
   { t = "Modified UTF-8 + depth/size limits identical to vanilla", done = false },
   { t = "SNBT parser + printer (vanilla formatting)", done = false },
@@ -196,11 +197,14 @@ phase = "P2"
 title = "Features & structures"
 weight = 7
 status = "in-progress"
-suites = ["block-facts", "structure-starts", "golden-terrain-structures", "golden-features", "golden-structures"]
+suites = ["block-facts", "java-hashset", "structure-starts", "golden-terrain-structures", "golden-features", "golden-structures"]
 tasks = [
+  { t = "Trees (all placers + decorators) and Java HashSet order incl. tree bins", done = true },
+  { t = "Structure piece placement in the features step (golden-structures)", done = false },
+  { t = "Block state rotation / mirroring (block-transforms)", done = false },
   { t = "Block shapes + per-state static facts (ADR 0009)", done = true },
-  { t = "Configured/placed features + placement modifiers", done = false },
-  { t = "Decoration step ordering", done = false },
+  { t = "Configured/placed features + placement modifiers", done = true },
+  { t = "Decoration step ordering", done = true },
   { t = "Structure sets, placement, jigsaw assembly", done = true },
   { t = "Structure templates loaded from the user's jar", done = true },
   { t = "Structure terrain adaptation (beardifier from real starts)", done = true },

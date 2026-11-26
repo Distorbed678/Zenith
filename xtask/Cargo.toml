@@ -31,6 +31,7 @@ zenith-worldgen = { path = "../crates/zenith-worldgen" }
 zenith-blocks = { path = "../crates/zenith-blocks" }
 zenith-biome = { path = "../crates/zenith-biome" }
 zenith-structures = { path = "../crates/zenith-structures" }
+zenith-features = { path = "../crates/zenith-features" }
 flate2.workspace = true
 libz-sys.workspace = true
 

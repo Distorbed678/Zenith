@@ -2258,9 +2258,20 @@ Public reference entry points suitable for black-box oracle testing (`golden-fea
    `*_WG` heightmaps stay frozen; a listed heightmap the chunk does not have yet is created and primed on first use.
    Post-processing marks are appended to a plain per-section list (created on first use), with no de-duplication.
    Question 5 (an API change in `zenith-worldgen`) is a design note, not a spec question; the copy is fine for now.
+7. **(implementer) Sky light during `FEATURES` — answered (golden-features, 2026-11-25).** `getRawBrightness(pos, 0)` is
+   `15` at every position of an Overworld (sky-light) region and `0` in the Nether/End: no light has been computed, and the
+   sky-light lookup of an unlit column reports `15`. Consequences seen in parity: `MushroomBlock.canSurvive` is true only on
+   `#minecraft:overrides_mushroom_light_requirement` blocks (podzol, mycelium, nylium) in the Overworld; mushroom
+   patches on plain grass/stone never place there. (Block light is `0`, so Question 3 stands for block light only.)
+8. **(implementer) Block tag rename.** In 26.3 the mushroom-light tag is `#minecraft:overrides_mushroom_light_requirement`
+   (there is no `mushroom_grow_block`); `BlockOps::tag_mushroom_grow_block` now reads that tag.
+9. **(implementer) `moss_patch` single-block divergence** — see `features-trees.md` Open question 8 (seed
+   `-8472910384721`, chunk `(1469, -435)`, block `(23519, 6, -6948)`: vanilla `short_grass`, Zenith `moss_carpet`).
 
 ---
 
 ## Parity status
-
-`golden-features`: not yet run.
+`golden-features` (2026-11-25): **1,800/1,800** identical — 180 chunks × 10 parts (blocks, biomes, 6 heightmaps,
+post-processing marks, ticks) over 3 seeds, structures off: nether (all 5 biomes), end, tree-free overworld biomes and
+32 forest-type overworld chunks per seed (every tree family). 8 more seeds: 4,799/4,800 before the HashSet tree-bin
+fix. Excluded until structure placement is wired in: chunks reaching `fossil` / `template` features.

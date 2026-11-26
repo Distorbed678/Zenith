@@ -4,6 +4,8 @@ mod guard;
 mod oracle;
 mod parity;
 mod parity_blocks;
+mod parity_features;
+mod parity_java;
 mod parity_structures;
 mod parity_terrain;
 mod parity_text;
@@ -89,6 +91,20 @@ enum ParityCmd {
     },
     /// M8: `structure_starts` & `structure_references` across Overworld, Nether, End vs the game's.
     StructureStarts {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
+    /// M8: `features`-status chunks (blocks, biomes, 6 heightmaps, post-processing, ticks) vs the game's.
+    GoldenFeatures {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
+    /// `java.util.HashSet<BlockPos>` iteration order (tree bins included) vs fixtures from the user's own JDK.
+    JavaHashset {
         #[arg(long, default_value = "26.3")]
         version: String,
         #[arg(long)]
@@ -250,6 +266,12 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::StructureStarts { version, write },
         } => parity_structures::structure_starts(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::GoldenFeatures { version, write },
+        } => parity_features::golden_features(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::JavaHashset { version, write },
+        } => parity_java::java_hashset(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::TextComponent { version, write },
         } => parity_text::text_component(&version, write),

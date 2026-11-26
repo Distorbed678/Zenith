@@ -58,6 +58,9 @@ about 0.02% of patch-sized sets (found 2026-11-25: 4 of 19,600 random patch shap
 - New length `2n`, new threshold `2 * threshold` (from 16: 12 → 24 → 48 …).
 - For each old bucket `j` in index order, its nodes go to `j` (bit `n` of `h` clear) or `j + n` (set), **keeping their
   relative chain order** in each half.
+- A bucket holding **exactly one node** is moved as a unit to `h & (2n - 1)` — this check comes first, so a tree bin
+  reduced to a single node by iterator removals stays a tree node (no split, no untreeify), and later inserts into that
+  bucket still follow the tree-insert rules (splice after the tree parent).
 - A **tree bin** splits the same way into a low and a high chain (order kept). For each half that is non-empty: if it
   has 6 or fewer nodes it becomes a plain chain (same order); otherwise it stays a tree bin, and it is **re-built as a
   tree (rule 2's build, then root to front) only if the other half is also non-empty**. If one half is empty, the other
@@ -101,8 +104,16 @@ Initial capacity 16; load factor 0.75; tree threshold 8; untree threshold 6; min
 
 ## Open questions
 
-None yet; the `java-hashset` fixtures settle every rule above except the non-reproducible identity tie-break.
+None open. The `java-hashset` fixtures (200,000 sequences, 2026-11-25) settle every rule above except the
+non-reproducible identity tie-break. One rule the first draft of the emulation missed, found by those fixtures:
+
+- **A tree bin with a single node left** (after iterator removals) is moved as it is by a resize: the resize checks
+  "this bucket has one node" before it looks at tree bins, so the node stays a tree node (no split, no untreeify) and
+  later inserts into that bucket still follow the tree-insert rules (splice after the tree parent, not append).
 
 ## Parity status
 
-`java-hashset`: not yet run.
+`java-hashset` (2026-11-25): **38,710/38,710** sequences identical at the default 40,000 (and 193,589/193,589 at
+200,000): patch shapes, dense collision clusters, growth past 64 / 128 / 256 buckets, BFS-style insert + pop-first and
+random insert / pop / remove interleavings, compared after every pop and at the end. Sequences that hit the
+identity tie-break (Edge case 1) are reported separately as nondeterministic in the JDK, not as failures.

@@ -1576,12 +1576,14 @@ dependencies = [
  "zenith-codec",
  "zenith-components",
  "zenith-data",
+ "zenith-features",
  "zenith-install",
  "zenith-math",
  "zenith-nbt",
  "zenith-parity",
  "zenith-registry",
  "zenith-storage",
+ "zenith-structures",
  "zenith-worldgen",
  "zip",
 ]
@@ -1672,6 +1674,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenith-features"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
+ "zenith-biome",
+ "zenith-blocks",
+ "zenith-codec",
+ "zenith-data",
+ "zenith-install",
+ "zenith-math",
+ "zenith-registry",
+ "zenith-worldgen",
+]
+
+[[package]]
 name = "zenith-install"
 version = "0.0.1"
 dependencies = [
@@ -1746,6 +1763,22 @@ dependencies = [
  "thiserror",
  "xxhash-rust",
  "zenith-nbt",
+]
+
+[[package]]
+name = "zenith-structures"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
+ "zenith-biome",
+ "zenith-blocks",
+ "zenith-codec",
+ "zenith-data",
+ "zenith-install",
+ "zenith-math",
+ "zenith-nbt",
+ "zenith-registry",
+ "zenith-worldgen",
 ]
 
 [[package]]

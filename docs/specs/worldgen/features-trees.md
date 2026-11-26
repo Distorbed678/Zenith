@@ -1162,7 +1162,59 @@ Public classes and methods in 26.3 suitable for black-box oracle instrumentation
 4. **[oracle] `StructureTemplate.updateShapeAtEdge` side effects during worldgen vs sapling growth**: Edge updates run with flags `2` (`UPDATE_CLIENTS`, no `UPDATE_NEIGHBORS`) and call `BlockState.updateShape` on both sides of every outer face of `shape`.
    - **Concrete black-box probe**: Place trees adjacent to water, vines, fences/walls, snowy grass blocks, and pre-existing leaves in both a `WorldGenRegion` and a live `ServerLevel` (via `TreeGrower.growTree`), then diff all block states and scheduled ticks within `bounds.inflatedBy(1)` immediately after `place` returns.
 
+**Implementer findings (zenith-features, `golden-features`, 2026-11-25).** Observed against the vanilla 26.3 server
+(forest-type Overworld chunks, 3 golden seeds plus 8 extra local seeds; one open mismatch, item 8):
+
+1. **HashSet iteration order — answered, and it matters more than §2.4 states.** Zenith's `JavaBlockPosSet` matches a real
+   JDK `HashSet` (insert, iteration order, and `iterator().next()` + `iterator.remove()`); it is checked against a
+   JDK-generated fixture in `java_hash.rs` and against pale-oak (2×2 trunk, `pale_moss` shuffles) and jungle chunks.
+   Two details of `updateLeaves` that §2.4 only implies: (a) each of the seven `toCheck` buckets is itself a
+   `HashSet<BlockPos>` and the "pop" is `iterator().next()` + remove, i.e. **JDK iteration order within the bucket**; (b) the
+   popped position is **not** re-checked against `shape.is_full`, so a position that was queued in bucket `d` and again
+   in a higher bucket `d' > d` (found by a different parent before it was popped) is popped twice and the **second pop
+   overwrites `distance` with `d'`**. Ordinary leaves therefore end up with the *largest* bucket they were queued in,
+   not the BFS minimum (e.g. leaves directly next to a trunk log can read `distance=2`). Treeified bins (≥8 collisions at
+   capacity ≥64) were never reached in the corpus.
+2. **JVM `Math.sin`/`cos`/`sqrt`/`pow` in `fancy_trunk_placer` — answered.** Using `f64` `sin`/`cos` from
+   `zenith_math::helpers::intrinsics` (the same routine the sine table is built from) and `f64::sqrt`/`x*x` for `pow(x, 2)`,
+   `fancy_oak` (with and without `beehive` / `place_on_ground`) matched in every sampled chunk.
+3. **Write-zone clipping — still open.** No corpus tree reached the 3×3 border, so the clipped-position behaviour is not
+   exercised (Zenith records clipped positions exactly as §2.2 states).
+4. **`updateShapeAtEdge` side effects — answered for the blocks that occur in forest-type chunks** (all observable
+   through block states and the scheduled-tick counts of the chunk dump; every item was needed for parity):
+   - Leaves schedule a block tick (`pos`, leaf block) iff `getDistanceAt(neighbour) + 1 != 1 || state.distance != 1 + …`
+     exactly as §2.5 says, plus a water fluid tick when `waterlogged`; ticks are de-duplicated per `(pos, block)`.
+   - `FallingBlock` family (sand, gravel, concrete powder, anvil) **schedules a block tick on every shape update**
+     (seen with gravel/sand beside mangrove/birch trees: +2..+5 ticks per chunk).
+   - `pale_hanging_moss` is **not** removed by `updateShape`: it schedules a 1-tick block tick when its upper neighbour
+     cannot hold it, and for `dir == DOWN` sets `tip = !neighbour.is(pale_hanging_moss)`. Its support test accepts any
+     full **collision** face (so leaves hold it), not only sturdy faces.
+   - `pale_moss_carpet` (`MossyCarpetBlock`) recomputes its side values with `getUpdatedState`; a `bottom=true` carpet
+     is treated as `createSides = true` (every supported horizontal side becomes `low`; `tall` if the carpet above has that
+     side and is not `bottom`; a non-bottom carpet drops a side whose lower carpet has none).
+   - Vines use `getUpdatedState` (no change for `DOWN`; air if no face remains); snowy grass/podzol/mycelium set `snowy`
+     from the block above only for `dir == UP`; unsupported plants/carpets/snow layers/double plants become air;
+     liquids schedule a fluid tick when either side is a source.
+   Everything else touched in the corpus (logs, dirt, mud, roots, stone, moss blocks, …) has no observable shape update.
+5. **Sapling growth (§8)** is not implemented (only the shared entry point `place_tree`), so it is unverified.
+6. **`pale_moss` decorator with a 2×2 trunk — answered.** The `pale_moss_patch` origin is `min-y` of the *shuffled* log
+   copy (the four `below_trunk` dirt blocks are the minimum), and the log / leaf hanger loops walk the `y`-sorted lists
+   in HashSet tie order; with that every pale-garden / dark-forest chunk of the corpus matches.
+7. **`creaking_heart` is only partly exercised**: a log whose six neighbours are all logs is never found in a plain 2×2
+   trunk, so the decorator consumed its shuffle and placed nothing in the corpus; the placement branch is unverified.
+8. **Open — lush-caves moss patch, one block (not tree related).** Seed `-8472910384721`, overworld chunk `(1469, -435)`
+   (biome `lush_caves`, `y = 6`, chunk-local `x = 15`): block `(23519, 6, -6948)` is `minecraft:short_grass` in vanilla and
+   `minecraft:moss_carpet` in Zenith (floor `moss_block` in both). It reproduces with tree placement disabled. The
+   east neighbour chunk `(1470, -435)` (not part of the suite, compared via a debug mode) shows 11 more
+   `moss_vegetation` picks that differ right after that position (same positions, swapped / shifted `short_grass`,
+   `moss_carpet`, `tall_grass` choices), i.e. the RNG stream of that single `moss_patch` placement diverges at that visit,
+   with every earlier visible pick identical. Not explained by `features.md` §4.55; probably an invisible
+   difference in the `vegetation_patch` surface set or its RNG draws before that position.
+
 ---
 
 ## Parity status
-`golden-features`: **not yet run**.
+Verified through `golden-features` (**1,800/1,800**, 2026-11-25): trees of every family (oak, birch, spruce/pine,
+jungle incl. mega, acacia, dark oak, mangrove with roots, cherry, pale oak with creaking hearts not exercised, azalea,
+fancy, fallen trees) and their decorators, including the leaf-distance pass in Java HashSet order (see
+`java/hash-collections.md`, `java-hashset`). Sapling growth shares the entry point but is not exercised.

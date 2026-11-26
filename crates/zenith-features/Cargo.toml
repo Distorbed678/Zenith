@@ -1,0 +1,27 @@
+[package]
+name = "zenith-features"
+description = "Worldgen features, placement modifiers, height/block-state providers, and the features chunk step for Zenith (26.3)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+zenith-biome = { path = "../zenith-biome" }
+zenith-blocks = { path = "../zenith-blocks" }
+zenith-codec = { path = "../zenith-codec" }
+zenith-math = { path = "../zenith-math" }
+zenith-registry = { path = "../zenith-registry" }
+zenith-worldgen = { path = "../zenith-worldgen" }
+
+[dev-dependencies]
+zenith-data = { path = "../zenith-data" }
+zenith-install = { path = "../zenith-install" }
+
+[lints]
+workspace = true
