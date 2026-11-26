@@ -54,8 +54,8 @@ impl StructureStart {
     /// `&mut self`: pieces keep state between chunk calls (snapped heights, placed-chest flags,
     /// shifted template positions), exactly like vanilla's in-memory pieces. `writable_area`
     /// is the chunk's writable area (`[chunkMinX, minY + 1, chunkMinZ] .. [chunkMinX + 15, maxY,
-    /// chunkMinZ + 15]`, see [`crate::world::writable_area`]); ruined portals and nether fossils
-    /// enlarge it, and the enlarged box stays in effect for later structures of the same chunk.
+    /// chunkMinZ + 15]`, see [`crate::world::writable_area`]); ruined portals enlarge it for the rest
+    /// of this call; callers pass a fresh box per start (`getWritableArea(chunk)` is evaluated per call).
     pub fn place_in_chunk(
         &mut self,
         env: &PlacementEnv<'_>,

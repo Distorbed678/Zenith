@@ -534,10 +534,11 @@ impl<'a, 'b> Mon<'a, 'b> {
         }
     }
     /// L/G/L bands (`y = 1 / 2 / 3`) over the wall line `(x0, z0)..(x1, z1)`.
-    fn band(&mut self, x0: i32, z0: i32, x1: i32, z1: i32) {
-        let (l, g) = (self.l, self.g);
+    /// `L` / `mid` / `L` at `y = 1 / 2 / 3` over a wall line (`mid` is `G` or `D`).
+    fn band(&mut self, mid: u32, x0: i32, z0: i32, x1: i32, z1: i32) {
+        let l = self.l;
         self.f(l, x0, 1, z0, x1, 1, z1);
-        self.f(g, x0, 2, z0, x1, 2, z1);
+        self.f(mid, x0, 2, z0, x1, 2, z1);
         self.f(l, x0, 3, z0, x1, 3, z1);
     }
 }
@@ -649,14 +650,15 @@ pub fn post_process(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
                 (16, 6, 41, 6),
                 (17, 5, 40, 5),
                 (21, 4, 36, 4),
-                (22, 3, 26, 3),
-                (31, 3, 35, 3),
                 (23, 2, 25, 2),
                 (32, 2, 34, 2),
             ] {
                 m.f(g, x0, y0, 21, x1, y1, 21);
             }
             m.water(26, 1, 21, 31, 3, 21);
+            // The `y = 3` slabs keep their end blocks `(26, 3)` / `(31, 3)` inside the water cut.
+            m.f(g, 22, 3, 21, 26, 3, 21);
+            m.f(g, 31, 3, 21, 35, 3, 21);
             m.f(l, 28, 4, 20, 29, 4, 21);
             for (x, y) in [(27, 3), (30, 3), (26, 2), (31, 2), (25, 1), (32, 1)] {
                 m.p(l, x, y, 21);
@@ -990,10 +992,10 @@ fn child_post_process(
             if east.is_some_and(|e| conn(rooms, e, D_UP).is_none()) {
                 m.on_fill(g, 8, 4, 1, 14, 4, 6);
             }
-            m.band(0, 0, 0, 7);
-            m.band(15, 0, 15, 7);
-            m.band(1, 0, 15, 0);
-            m.band(1, 7, 14, 7);
+            m.band(g, 0, 0, 0, 7);
+            m.band(g, 15, 0, 15, 7);
+            m.band(g, 1, 0, 15, 0);
+            m.band(g, 1, 7, 14, 7);
             m.f(l, 5, 1, 0, 10, 1, 4);
             m.f(l, 5, 3, 0, 10, 3, 4);
             m.f(g, 6, 2, 0, 9, 2, 3);
@@ -1082,10 +1084,10 @@ fn child_post_process(
             if north.is_some_and(|n| conn(rooms, n, D_UP).is_none()) {
                 m.on_fill(g, 1, 4, 8, 6, 4, 14);
             }
-            m.band(0, 0, 0, 15);
-            m.band(7, 0, 7, 15);
-            m.band(1, 0, 7, 0);
-            m.band(1, 15, 6, 15);
+            m.band(g, 0, 0, 0, 15);
+            m.band(g, 7, 0, 7, 15);
+            m.band(g, 1, 0, 7, 0);
+            m.band(g, 1, 15, 6, 15);
             for x in [1, 6] {
                 for y in [1, 3] {
                     m.f(l, x, y, 1, x, y, 2);
@@ -1304,18 +1306,20 @@ fn child_post_process(
                     for (x, z) in [(1, 1), (6, 1), (1, 6), (6, 6)] {
                         m.p(sl, x, 2, z);
                     }
-                    for (dir, line) in [
-                        (D_SOUTH, (3, 0, 4, 0)),
-                        (D_NORTH, (3, 7, 4, 7)),
-                        (D_WEST, (0, 3, 0, 4)),
-                        (D_EAST, (7, 3, 7, 4)),
+                    // Closed sides are two blocks deep at `y = 1, 3` (the outer line only at `y = 2`).
+                    for (dir, line, thick) in [
+                        (D_SOUTH, (3, 0, 4, 0), (3, 0, 4, 1)),
+                        (D_NORTH, (3, 7, 4, 7), (3, 6, 4, 7)),
+                        (D_WEST, (0, 3, 0, 4), (0, 3, 1, 4)),
+                        (D_EAST, (7, 3, 7, 4), (6, 3, 7, 4)),
                     ] {
                         let (x0, z0, x1, z1) = line;
                         if open(rooms, s, dir) {
                             m.f(l, x0, 3, z0, x1, 3, z1);
                         } else {
-                            m.f(l, x0, 1, z0, x1, 1, z1);
-                            m.f(l, x0, 3, z0, x1, 3, z1);
+                            let (tx0, tz0, tx1, tz1) = thick;
+                            m.f(l, tx0, 1, tz0, tx1, 1, tz1);
+                            m.f(l, tx0, 3, tz0, tx1, 3, tz1);
                             m.f(g, x0, 2, z0, x1, 2, z1);
                         }
                     }
@@ -1366,10 +1370,10 @@ fn child_post_process(
                     }
                 }
                 _ => {
-                    m.band(0, 0, 7, 0);
-                    m.band(0, 7, 7, 7);
-                    m.band(0, 0, 0, 7);
-                    m.band(7, 0, 7, 7);
+                    m.band(d, 0, 0, 7, 0);
+                    m.band(d, 0, 7, 7, 7);
+                    m.band(d, 0, 0, 0, 7);
+                    m.band(d, 7, 0, 7, 7);
                     m.f(d, 3, 1, 0, 4, 2, 0);
                     m.f(d, 3, 1, 7, 4, 2, 7);
                     m.f(d, 0, 1, 3, 0, 2, 4);
@@ -1410,10 +1414,10 @@ fn child_post_process(
                     }
                 }
             }
-            m.band(0, 0, 7, 0);
-            m.band(0, 7, 7, 7);
-            m.band(0, 0, 0, 7);
-            m.band(7, 0, 7, 7);
+            m.band(d, 0, 0, 7, 0);
+            m.band(d, 0, 7, 7, 7);
+            m.band(d, 0, 0, 0, 7);
+            m.band(d, 7, 0, 7, 7);
             m.f(d, 3, 1, 0, 4, 2, 0);
             m.f(d, 3, 1, 7, 4, 2, 7);
             m.f(d, 0, 1, 3, 0, 2, 4);

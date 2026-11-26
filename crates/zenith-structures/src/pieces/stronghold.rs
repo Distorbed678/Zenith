@@ -128,8 +128,9 @@ fn small_door(b: &mut PieceBuilder<'_>, door: SmallDoor, fx: i32, fy: i32, fz: i
             b.place_block(ew, fx, fy + 2, fz);
             b.place_block(ew, fx + 1, fy + 2, fz);
             b.place_block(ew, fx + 2, fy + 2, fz);
-            b.place_block(e, fx + 2, fy, fz);
+            // The east column is placed top-down (the order shows in the post-processing marks).
             b.place_block(e, fx + 2, fy + 1, fz);
+            b.place_block(e, fx + 2, fy, fz);
         }
     }
 }
@@ -277,8 +278,8 @@ pub fn post_process(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
             let we = b.s("iron_bars", &[("west", "true"), ("east", "true")]);
             for y in 1..=3 {
                 b.place_block(ns, 4, y, 4);
-                b.place_block(ns, 4, y, 6);
                 b.place_block(nse, 4, y, 5);
+                b.place_block(ns, 4, y, 6);
                 b.place_block(we, 5, y, 5);
                 b.place_block(we, 6, y, 5);
                 b.place_block(we, 7, y, 5);
@@ -438,7 +439,6 @@ pub fn post_process(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
             let h = if tall { 11 } else { 6 };
             let web = b.d("cobweb");
             let bookshelf = b.d("bookshelf");
-            let fence = b.d("oak_fence");
             b.gen_box_sel(0, 0, 0, 13, h - 1, 14, true, rng, &mut sel);
             small_door(&mut b, door, 4, 1, 0);
             b.maybe_box(rng, 0.07, 2, 1, 1, 11, 4, 13, web, web, false, false);
@@ -506,12 +506,9 @@ pub fn post_process(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
                 let f_e = f(&b, &["east"]);
                 let f_w = f(&b, &["west"]);
                 let f_all = f(&b, &["north", "south", "west", "east"]);
-                b.place_block(fence, 6, 9, 7);
-                b.place_block(fence, 7, 9, 7);
-                let _ = (fence,);
                 b.place_block(f_e, 6, 9, 7);
-                b.place_block(f_e, 6, 8, 7);
                 b.place_block(f_w, 7, 9, 7);
+                b.place_block(f_e, 6, 8, 7);
                 b.place_block(f_w, 7, 8, 7);
                 b.place_block(f_all, 6, 7, 7);
                 b.place_block(f_all, 7, 7, 7);

@@ -14,13 +14,13 @@ use crate::geom::{
     transform_vec3,
 };
 use crate::template::{
-    StructureBlockInfo, StructurePlaceSettings, StructureTemplate, process_block_infos,
+    StructureBlockInfo, StructurePlaceSettings, StructureTemplate, process_block_infos_shared,
 };
 use crate::world::{ProcessorView, StructureWorld, UPDATE_BARRIER_FLAGS, WorldgenRandom};
 
 /// Whether the block of `state` is a vanilla `RandomizableContainer` block entity host
 /// (`Barrel`, `Chest`/`TrappedChest`, `Crafter`, `DecoratedPot`, `Dispenser`/`Dropper`, `Hopper`,
-/// `ShulkerBox`; **not** brushable blocks).
+/// `ShulkerBox`, and the copper chests; **not** brushable blocks).
 pub fn is_randomizable_container(path: &str) -> bool {
     matches!(
         path,
@@ -34,6 +34,7 @@ pub fn is_randomizable_container(path: &str) -> bool {
             | "hopper"
     ) || path == "shulker_box"
         || path.ends_with("_shulker_box")
+        || path.ends_with("copper_chest")
 }
 
 /// `LiquidBlockContainer` implementors: every block with a `waterlogged` property plus kelp and
@@ -95,7 +96,7 @@ pub fn filter_blocks(
     if template.palettes.is_empty() {
         return Vec::new();
     }
-    let idx = settings.select_palette_index(template.palettes.len(), Some(position));
+    let idx = settings.select_palette_index(template.palettes.len(), Some(position), None);
     let blocks = world.blocks();
     let mut out = Vec::new();
     for b in &template.palettes[idx].blocks {
@@ -142,7 +143,8 @@ pub fn place_template(
     if template.palettes.is_empty() {
         return false;
     }
-    let pal = settings.select_palette_index(template.palettes.len(), Some(position));
+    let pal =
+        settings.select_palette_index(template.palettes.len(), Some(position), Some(&mut *random));
     let block_list = &template.palettes[pal].blocks;
     if (block_list.is_empty() && (settings.ignore_entities || template.entities.is_empty()))
         || template.size.x < 1
@@ -152,12 +154,13 @@ pub fn place_template(
         return false;
     }
 
-    let processed = process_block_infos(
+    let processed = process_block_infos_shared(
         &ProcessorView(&*world),
         position,
         reference_pos,
         settings,
         block_list,
+        Some(&mut *random),
     );
 
     let apply_waterlogging = settings.liquid_settings == LiquidSettings::ApplyWaterlogging;

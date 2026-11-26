@@ -23,7 +23,10 @@ use crate::template::ProcessorWorldView;
 
 /// Object-safe subset of [`RandomSource`] used by piece placement (`WorldgenRandom` of the
 /// decoration step, and `level.getRandom()`).
-pub trait WorldgenRandom {
+pub trait WorldgenRandom: std::any::Any {
+    /// Upcast for recovering the concrete random (the features adapter needs it to run placed
+    /// features, which take the concrete decoration random).
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
     /// `nextInt()`.
     fn next_int(&mut self) -> i32;
     /// `nextInt(bound)` (`bound > 0`).
@@ -40,7 +43,11 @@ pub trait WorldgenRandom {
     fn next_gaussian(&mut self) -> f64;
 }
 
-impl<R: RandomSource> WorldgenRandom for R {
+impl<R: RandomSource + 'static> WorldgenRandom for R {
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
     #[inline]
     fn next_int(&mut self) -> i32 {
         RandomSource::next_int(self)

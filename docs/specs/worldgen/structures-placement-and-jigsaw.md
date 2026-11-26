@@ -832,6 +832,44 @@ Public classes and methods a black-box parity harness can call to capture interm
 8. **(implementer) `knownShape = false` shape updates are not implemented**: §4.5 step 7 (`updateShapeAtEdge` / `updateFromNeighbourShapes`) runs for template pieces that do not set `knownShape` (igloo, shipwreck, ocean ruin, ruined portal, nether fossil, end city, mansion). `place_template` skips it, so connection properties (fences, panes, walls, stairs shapes) of those pieces stay exactly as stored in the template after mirror/rotation. Jigsaw pieces (`knownShape = true`) are unaffected. **Probe**: compare fence / pane / stair states of shipwrecks and end cities against vanilla.
 9. **(implementer) Placement API shape**: `StructureStart::place_in_chunk(&mut self, env, world, random, writable_area: &mut BoundingBox)` takes `&mut self` because vanilla pieces keep state between chunk calls (snapped scattered-feature heights, placed-chest flags, shifted template positions, ocean-ruin Y) and `&mut BoundingBox` because ruined portals and nether fossils encapsulate their box into the shared writable area for the rest of the chunk's decoration. `FeaturePoolElement` placement is delegated to `StructureWorld::place_feature`; block entities and entities are exchanged as NBT (`set_block_entity` merges keys into the entity at the position, `add_entity` records an entity compound with `id`/`Pos`; spawning itself is not performed).
 
+10. **(implementer) Reference iteration order is fastutil `LongOpenHashSet` order — answers [oracle] item 3 for `applyBiomeDecoration`.**
+    Several starts of one structure that reference the same chunk place their pieces in the iteration order of a default
+    `LongOpenHashSet` (capacity 32 for the default size 16 at load factor 0.75, `HashCommon.mix(long)` = `h = x * 0x9E3779B97F4A7C15; h ^= h >>> 32; (int)(h ^ (h >>> 16))`, linear
+    probing, rehash to `arraySize(size + 1, 0.75)`, iterator walks the table from the last slot down, the zero key first),
+    filled in the order `createReferences` adds them (`x` ascending outer, `z` ascending inner). Verified by `golden-structures`
+    on two overlapping mineshafts (seed 12345 chunk `(37,-114)`: the start whose first piece is `mscorridor #35` places before the one
+    with `#167`); implemented in `zenith-features::fastutil`.
+11. **(implementer) Facts about piece block order found by `golden-structures`** (the post-processing marks are an ordered list, so the
+    placement *order* of shape-check blocks is observable; all fixed in `zenith-structures`):
+    - Stronghold `GRATES`: the east column is placed top-down (`(fx+2, fy+1)` then `(fx+2, fy)`).
+    - Stronghold `PrisonHall` bars: per `y` the `ns` bars are placed `z = 4, 5, 6` (middle `[n,s,e]` one second), then the three `we` bars.
+    - Stronghold `Library` chandelier: `(6,9,7)[e]`, `(7,9,7)[w]`, `(6,8,7)[e]`, `(7,8,7)[w]`, then the rest as listed; no extra bare fence.
+    - Nether `BridgeStraight` side ribs: all four `NBF[n,s,e]` boxes (`x = 0`) first, then all four `NBF[n,s,w]` boxes (`x = 4`).
+    - Jungle temple basement descent runs `i = 0..=3` (four steps, down to `y = -3`).
+    - Ocean monument: `SimpleRoom` design `2` and the sponge room use `D` (dark prismarine) at `y = 2` of the perimeter band (the other
+      rooms use `G`); `SimpleRoom` design `0` closed sides are two blocks deep at `y = 1, 3` (`[3,1,0..4,1,1]` style, outer line only at `y = 2`);
+      the entrance wall's `y = 3` slabs `[22..26]` and `[31..35]` are placed after the `generateWaterBox(26,1,21 .. 31,3,21)` cut (their end blocks survive).
+12. **(implementer) Copper chests are `RandomizableContainer`s.** `copper_chest` and its exposed / weathered / oxidized / waxed
+    variants take the `LootTableSeed = random.nextLong()` draw in `placeInWorld` like `chest`; without it the shared decoration random
+    desynchronises (abandoned camps with a copper chest placed trees with the wrong height).
+13. **(implementer) `fossil` / `template` features share the feature random with `placeInWorld`.** Both set `settings.random = random`: the
+    palette pick (`nextInt(palettes)`), `block_rot` / `block_age` rolls and `LootTableSeed` all advance the feature's `WorldgenRandom`
+    (`StructurePlaceSettings::shared_random`). `rule` processors still use their own per-block random.
+14. **(implementer) Tree edge shape updates reach structure blocks.** A tree placed next to a structure fence reconnects it
+    (`FenceBlock.updateShape`, e.g. savanna camp fence next to an acacia trunk); `zenith-features` handles `FenceBlock` neighbours.
+15. **(implementer) Writable area per start.** `place_in_chunk` is called with a fresh `getWritableArea(chunk)` for every start (features.md §1.4
+    wording). §5.1 step 5 reads as one box per chunk; no case in the corpus distinguishes the two.
+16. **[oracle] Still open after `golden-structures` (seed 12345 / 0 / -8472910384721, 3 seeds, 1,715 chunks, 16,737/17,150 identical):**
+    - *Edge shape updates of non-known-shape templates* (igloo, shipwreck, ocean ruin, ruined portal, nether fossil via flags 260, end city, mansion, woodland
+      fossils): remaining differences are connection states of stairs / fences / walls / panes / bars (same block, different properties),
+      vanilla-only `water` / `lava` fluid ticks and extra block ticks, and neighbours removed by `updateShape` (`air` instead of `ladder`, `tall_seagrass`).
+      Example: shipwreck seed 12345 `(40,81)`: 22 `spruce_stairs` differ in `shape`/`facing`.
+    - *Ruined portal netherrack spread* (`on_land_surface` / `on_ocean_floor` setups only; `partly_buried`, `underground`, `in_mountain`
+      pass): same pattern, individual columns differ and the drip columns below (e.g. jungle seed 12345 chunk `(-97,-40)`, portal `bb = (-1552,72,-640)..(-1544,78,-632)`,
+      first column in loop order `x = -1547, z = -626`: Zenith places netherrack at `y = 72`, vanilla leaves the grass block; the neighbour chunk to the west matches).
+    - *Ancient city sculk* (seed 12345 `(-15,53)`, seed 0 `(49,78)`, `(-44,107)`): `sculk_patch` result differs inside the city (hundreds of blocks).
+    - *Leaf block ticks* near structures (villages taiga/snowy, camps bamboo_jungle/swamp): vanilla has 1-12 more scheduled block ticks than Zenith, no block differs.
+
 ---
 
 ## Parity status
@@ -839,4 +877,4 @@ Public classes and methods a black-box parity harness can call to capture interm
 structure start (structure, start chunk, reference count, validity, bounds, every piece's type, bounds, orientation
 and depth in list order) and every reference, for all 52 structure types of 26.3. `golden-terrain-structures`
 (terrain with structures on, beardifier from the real starts per §5.2): **101,830/101,830** over 12 seeds, all four
-terrain-adjustment modes. Piece block placement in the features step is not verified yet (`golden-structures`).
+terrain-adjustment modes. Piece block placement in the features step: `golden-structures` (2026-11-26) **16,737/17,150** identical over 3 seeds / 1,715 chunks; see open question 16 for what is left (all other structure types are 100%: villages, outposts, trail ruins, trial chambers, strongholds, fortresses, monuments, mineshafts, camps, desert/jungle temples, swamp huts, buried treasure, bastions, nether fossils).

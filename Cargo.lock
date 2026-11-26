@@ -1684,7 +1684,9 @@ dependencies = [
  "zenith-data",
  "zenith-install",
  "zenith-math",
+ "zenith-nbt",
  "zenith-registry",
+ "zenith-structures",
  "zenith-worldgen",
 ]
 
@@ -1705,6 +1707,16 @@ dependencies = [
  "toml",
  "ureq",
  "zip",
+]
+
+[[package]]
+name = "zenith-light"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
+ "zenith-blocks",
+ "zenith-registry",
+ "zenith-worldgen",
 ]
 
 [[package]]

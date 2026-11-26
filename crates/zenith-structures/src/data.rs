@@ -1045,6 +1045,22 @@ impl StructureData {
         self.processor_lists.get(id)
     }
 
+    /// Decodes a `Holder<StructureProcessorList>` JSON value (a registry id string or an inline
+    /// list) into its processors, e.g. the `fossil_processors` of a `fossil` feature.
+    pub fn decode_processor_list_holder(
+        &self,
+        json: &Json,
+    ) -> Result<Vec<StructureProcessor>, String> {
+        match ProcessorListRefCodec.decode(json).demand() {
+            Ok(ProcessorListRef::Inline(list)) => Ok(list),
+            Ok(ProcessorListRef::Reference(id)) => self
+                .processor_list(&id)
+                .map(|l| l.as_ref().clone())
+                .ok_or_else(|| format!("unknown processor list {id}")),
+            Err(e) => Err(e.message),
+        }
+    }
+
     /// Resolved biome tags (`tags/worldgen/biome`).
     #[inline]
     pub fn biome_tags(&self) -> &BTreeMap<Identifier, Vec<Identifier>> {

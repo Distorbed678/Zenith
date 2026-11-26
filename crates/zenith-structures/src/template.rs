@@ -23,7 +23,7 @@ use crate::data::{
 };
 use crate::geom::{
     BlockPos, BoundingBox, BoundingBoxExt, FrontAndTop, Mirror, Rotation, is_horizontal,
-    random_horizontal_direction, shuffle_slice, transform_pos,
+    shuffle_slice, transform_pos,
 };
 
 /// Error loading a `.nbt` structure template.
@@ -150,8 +150,11 @@ pub struct StructurePlaceSettings {
     pub liquid_settings: LiquidSettings,
     /// Ordered processor list.
     pub processors: Vec<StructureProcessor>,
-    /// Optional explicit RNG seed state (when `None`, derived per position via `position_hash`).
-    pub random: Option<LegacyRandom>,
+    /// `settings.setRandom(random)` where `random` is the very stream also handed to
+    /// `placeInWorld` (fossil and `template` features): palette selection and the per-block
+    /// randoms of `block_rot` / `block_age` then draw from that shared stream. When `false`, the
+    /// per-block random is derived from the position (`Mth.getSeed(pos)`).
+    pub shared_random: bool,
 }
 
 impl Default for StructurePlaceSettings {
@@ -166,36 +169,39 @@ impl Default for StructurePlaceSettings {
             finalize_entities: false,
             liquid_settings: LiquidSettings::ApplyWaterlogging,
             processors: Vec::new(),
-            random: None,
+            shared_random: false,
         }
     }
 }
 
 impl StructurePlaceSettings {
-    /// `settings.getRandom(pos)` (§4.2).
-    pub fn get_random(&mut self, pos: Option<BlockPos>) -> LegacyRandom {
-        if let Some(ref rng) = self.random {
-            return rng.clone();
-        }
+    /// `settings.getRandom(pos)` (§4.2) for the position-derived case: a fresh legacy random
+    /// seeded from the block position (`Mth.getSeed`). With [`Self::shared_random`] set, callers
+    /// use the shared stream instead.
+    pub fn get_random(&self, pos: Option<BlockPos>) -> LegacyRandom {
         match pos {
             Some(p) => LegacyRandom::new(position_hash(p.x, p.y, p.z)),
             None => LegacyRandom::new(0),
         }
     }
 
-    /// Selects a palette from `palettes` (`settings.getRandomPalette`, §4.2).
-    pub fn select_palette_index(&mut self, palette_count: usize, pos: Option<BlockPos>) -> usize {
+    /// Selects a palette from `palettes` (`settings.getRandomPalette`, §4.2). Always draws one
+    /// `nextInt(count)`; with [`Self::shared_random`] the draw advances `shared`.
+    pub fn select_palette_index(
+        &mut self,
+        palette_count: usize,
+        pos: Option<BlockPos>,
+        shared: Option<&mut dyn crate::world::WorldgenRandom>,
+    ) -> usize {
         if palette_count == 0 {
             return 0;
         }
-        if let Some(ref mut rng) = self.random {
+        if self.shared_random
+            && let Some(rng) = shared
+        {
             return rng.next_int_bounded(palette_count as i32) as usize;
         }
-        let mut rng = match pos {
-            Some(p) => LegacyRandom::new(position_hash(p.x, p.y, p.z)),
-            None => LegacyRandom::new(0),
-        };
-        rng.next_int_bounded(palette_count as i32) as usize
+        self.get_random(pos).next_int_bounded(palette_count as i32) as usize
     }
 }
 
@@ -684,6 +690,26 @@ pub fn process_block_infos(
     settings: &mut StructurePlaceSettings,
     block_info_list: &[StructureBlockInfo],
 ) -> Vec<StructureBlockInfo> {
+    process_block_infos_shared(
+        world,
+        position,
+        reference_pos,
+        settings,
+        block_info_list,
+        None,
+    )
+}
+
+/// [`process_block_infos`] with the shared `settings.random` stream (used when
+/// [`StructurePlaceSettings::shared_random`] is set).
+pub fn process_block_infos_shared(
+    world: &dyn ProcessorWorldView,
+    position: BlockPos,
+    reference_pos: BlockPos,
+    settings: &mut StructurePlaceSettings,
+    block_info_list: &[StructureBlockInfo],
+    mut shared: Option<&mut dyn crate::world::WorldgenRandom>,
+) -> Vec<StructureBlockInfo> {
     let any_whole_piece = settings
         .processors
         .iter()
@@ -715,7 +741,16 @@ pub fn process_block_infos(
         });
         for proc in &processors {
             let Some(b) = cur else { break };
-            cur = apply_processor(world, position, reference_pos, info.pos, b, proc, settings);
+            cur = apply_processor(
+                world,
+                position,
+                reference_pos,
+                info.pos,
+                b,
+                proc,
+                settings,
+                &mut shared,
+            );
         }
         if let Some(b) = cur {
             processed_list.push(b);
@@ -734,6 +769,7 @@ pub fn process_block_infos(
                 delegate,
                 limit,
                 settings,
+                &mut shared,
             );
         }
     }
@@ -818,7 +854,7 @@ fn eval_pos_rule_test(
         } => {
             let dist = world_pos.dist_manhattan(world_ref);
             let t = inverse_lerp_f32(dist as f32, min_dist as f32, max_dist as f32);
-            rng.next_float() <= clamped_lerp_f32(min_chance, max_chance, t)
+            rng.next_float() <= clamped_lerp_f32(t, min_chance, max_chance)
         }
         PosRuleTest::AxisAlignedLinearPos {
             min_chance,
@@ -834,7 +870,7 @@ fn eval_pos_rule_test(
             };
             let dist = (diff as f32).abs() as i32;
             let t = inverse_lerp_f32(dist as f32, min_dist as f32, max_dist as f32);
-            rng.next_float() <= clamped_lerp_f32(min_chance, max_chance, t)
+            rng.next_float() <= clamped_lerp_f32(t, min_chance, max_chance)
         }
     }
 }
@@ -905,6 +941,7 @@ fn json_to_nbt(j: &Json) -> Option<Tag> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_processor(
     world: &dyn ProcessorWorldView,
     _position: BlockPos,
@@ -913,6 +950,7 @@ fn apply_processor(
     mut info: StructureBlockInfo,
     proc: &StructureProcessor,
     settings: &mut StructurePlaceSettings,
+    shared: &mut Option<&mut dyn crate::world::WorldgenRandom>,
 ) -> Option<StructureBlockInfo> {
     let blocks = world.blocks();
     let tags = world.block_tags();
@@ -930,13 +968,18 @@ fn apply_processor(
             rottable_blocks,
             integrity,
         } => {
-            let mut rng = settings.get_random(Some(info.pos));
             let matches = match rottable_blocks {
                 None => true,
                 Some(set) => block_matches_holder_set(info.state_id, set, blocks, tags),
             };
-            if matches && (rng.next_float() > *integrity || integrity.is_nan()) {
-                return None;
+            if matches {
+                let roll = match (settings.shared_random, shared.as_deref_mut()) {
+                    (true, Some(r)) => r.next_float(),
+                    _ => settings.get_random(Some(info.pos)).next_float(),
+                };
+                if roll > *integrity || integrity.is_nan() {
+                    return None;
+                }
             }
             Some(info)
         }
@@ -1048,9 +1091,14 @@ fn apply_processor(
             Some(info)
         }
         StructureProcessor::BlockAge { mossiness } => {
-            let mut rng = settings.get_random(Some(info.pos));
-            if let Some(new_id) = apply_block_age(info.state_id, *mossiness, &mut rng, blocks, tags)
-            {
+            let new_id = match (settings.shared_random, shared.as_deref_mut()) {
+                (true, Some(r)) => apply_block_age(info.state_id, *mossiness, r, blocks, tags),
+                _ => {
+                    let mut rng = settings.get_random(Some(info.pos));
+                    apply_block_age(info.state_id, *mossiness, &mut rng, blocks, tags)
+                }
+            };
+            if let Some(new_id) = new_id {
                 info.state_id = new_id;
             }
             Some(info)
@@ -1074,6 +1122,7 @@ fn finalize_capped(
     delegate: &StructureProcessor,
     limit: &zenith_worldgen::IntProvider,
     settings: &mut StructurePlaceSettings,
+    shared: &mut Option<&mut dyn crate::world::WorldgenRandom>,
 ) -> Vec<StructureBlockInfo> {
     if processed_list.is_empty() || original_list.len() != processed_list.len() {
         return processed_list;
@@ -1102,6 +1151,7 @@ fn finalize_capped(
             cur.clone(),
             delegate,
             settings,
+            shared,
         ) && altered != cur
         {
             processed_list[idx] = altered;
@@ -1155,10 +1205,10 @@ fn with_properties_of(
 
 fn random_facing_stairs(
     block: &str,
-    rng: &mut LegacyRandom,
+    rng: &mut dyn crate::world::WorldgenRandom,
     blocks: &BlockStateTable,
 ) -> Option<u32> {
-    let facing = random_horizontal_direction(rng).name();
+    let facing = crate::geom::Direction::HORIZONTAL[rng.next_int_bounded(4) as usize].name();
     let half = if rng.next_int_bounded(2) == 0 {
         "top"
     } else {
@@ -1185,7 +1235,7 @@ fn default_state_of(block: &str, blocks: &BlockStateTable) -> Option<u32> {
 fn apply_block_age(
     state_id: u32,
     mossiness: f32,
-    rng: &mut LegacyRandom,
+    rng: &mut dyn crate::world::WorldgenRandom,
     blocks: &BlockStateTable,
     tags: &BlockTags,
 ) -> Option<u32> {

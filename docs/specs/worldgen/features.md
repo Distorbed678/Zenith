@@ -2267,6 +2267,11 @@ Public reference entry points suitable for black-box oracle testing (`golden-fea
    (there is no `mushroom_grow_block`); `BlockOps::tag_mushroom_grow_block` now reads that tag.
 9. **(implementer) `moss_patch` single-block divergence** — see `features-trees.md` Open question 8 (seed
    `-8472910384721`, chunk `(1469, -435)`, block `(23519, 6, -6948)`: vanilla `short_grass`, Zenith `moss_carpet`).
+10. **(implementer) Structure interleaving (answered by `golden-structures`, 2026-11-26).** §1.4 step 11.1 is implemented as written: structures of the
+    step in registry (ascending identifier) order, `setFeatureSeed(decorationSeed, index, step)` for every structure (also without starts), every
+    start referencing the chunk placed with the shared random, starts kept in memory so piece state survives across chunk calls. The starts of one
+    structure are visited in fastutil `LongOpenHashSet` order (structures spec, open question 10). `FeaturePoolElement` runs the placed feature with
+    the same random and no biome check. `fossil` / `template` run through `StructureTemplate.placeInWorld` with `settings.random` = the feature random.
 
 ---
 
@@ -2274,4 +2279,4 @@ Public reference entry points suitable for black-box oracle testing (`golden-fea
 `golden-features` (2026-11-25): **1,800/1,800** identical — 180 chunks × 10 parts (blocks, biomes, 6 heightmaps,
 post-processing marks, ticks) over 3 seeds, structures off: nether (all 5 biomes), end, tree-free overworld biomes and
 32 forest-type overworld chunks per seed (every tree family). 8 more seeds: 4,799/4,800 before the HashSet tree-bin
-fix. Excluded until structure placement is wired in: chunks reaching `fossil` / `template` features.
+fix. Fossil / template features are no longer excluded (`fossil/template placed` chunks are in the corpus); `golden-features` stays 1,800/1,800. With structures on see `golden-structures` in the structures spec.

@@ -6,6 +6,7 @@
 pub mod block_ops;
 pub mod data;
 pub mod decorator;
+pub mod fastutil;
 pub mod features;
 pub mod java_hash;
 pub mod placement;
@@ -13,6 +14,7 @@ pub mod providers;
 pub mod region;
 pub mod rng;
 pub mod sorter;
+pub mod structure_place;
 
 pub use block_ops::{BlockBitSet, BlockOps};
 pub use data::{BiomeFeatureSettings, FeatureData, FeatureLoadError};
@@ -33,3 +35,7 @@ pub use providers::{
 pub use region::{FeatureBlockEntity, FeatureEntity, GenerationRegion, RegionChunk};
 pub use rng::{BlockPos, Rotation, WorldgenRandom};
 pub use sorter::{FeatureCycleError, StepFeatureData, build_features_per_step};
+pub use structure_place::{
+    PlaceFeatureEnv, RegionRandom, RegionStructureWorld, StartStore, StructurePlacementHook,
+    StructureTemplateHook,
+};

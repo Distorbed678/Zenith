@@ -42,7 +42,7 @@ pub use placement::{
 pub use template::{
     JigsawBlockInfo, JointType, ProcessorWorldView, StructureBlockInfo, StructureEntityInfo,
     StructurePlaceSettings, StructureTemplate, TemplateError, TemplateManager, process_block_infos,
-    transform_block_state,
+    process_block_infos_shared, transform_block_state,
 };
 pub use world::{MemoryWorld, StructureWorld, WorldgenRandom, writable_area};
 

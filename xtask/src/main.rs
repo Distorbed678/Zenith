@@ -103,6 +103,13 @@ enum ParityCmd {
         #[arg(long)]
         write: bool,
     },
+    /// M8: `features`-status chunks with structures on (every structure type's pieces, fossils, templates) vs the game's.
+    GoldenStructures {
+        #[arg(long, default_value = "26.3")]
+        version: String,
+        #[arg(long)]
+        write: bool,
+    },
     /// `java.util.HashSet<BlockPos>` iteration order (tree bins included) vs fixtures from the user's own JDK.
     JavaHashset {
         #[arg(long, default_value = "26.3")]
@@ -279,6 +286,9 @@ fn main() -> ExitCode {
         Cmd::Parity {
             cmd: ParityCmd::GoldenFeatures { version, write },
         } => parity_features::golden_features(&version, write),
+        Cmd::Parity {
+            cmd: ParityCmd::GoldenStructures { version, write },
+        } => parity_features::golden_structures(&version, write),
         Cmd::Parity {
             cmd: ParityCmd::JavaHashset { version, write },
         } => parity_java::java_hashset(&version, write),

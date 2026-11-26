@@ -141,6 +141,17 @@ impl FeatureDecorator {
     ) -> GenerationRegion {
         let chunks =
             std::array::from_fn(|i| RegionChunk::from_terrain_chunk(terrain_chunks[i], &self.ops));
+        self.make_region_from_chunks(center_x, center_z, chunks)
+    }
+
+    /// Builds a `3 × 3` [`GenerationRegion`] from already-built chunks (`(dz + 1) * 3 + (dx + 1)`
+    /// order), e.g. chunks an earlier decoration of a neighbouring chunk has written into.
+    pub fn make_region_from_chunks(
+        &self,
+        center_x: i32,
+        center_z: i32,
+        chunks: [RegionChunk; 9],
+    ) -> GenerationRegion {
         let region_random = self
             .region_random_factory
             .at(center_x << 4, 0, center_z << 4);
@@ -189,6 +200,7 @@ impl FeatureDecorator {
         for step_index in 0..generation_steps {
             // 11.1 Interleaved structure placement
             self.structure_hook.place_structures_for_step(
+                &ctx,
                 step_index,
                 decoration_seed,
                 region,

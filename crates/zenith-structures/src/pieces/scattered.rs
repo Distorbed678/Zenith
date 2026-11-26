@@ -518,7 +518,7 @@ pub fn jungle_temple(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
     stone!(5, 4, 5, 6, 4, 5);
     b.place_block(ce, 4, 4, 5);
     b.place_block(cw, 7, 4, 5);
-    for i in 0..3 {
+    for i in 0..=3 {
         b.place_block(cso, 5, -i, 6 + i);
         b.place_block(cso, 6, -i, 6 + i);
         b.air_box(5, -i, 7 + i, 6, -i, 9 + i);

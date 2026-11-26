@@ -1,8 +1,11 @@
 //! `golden-features` parity suite: full `features`-status chunks (blocks, biomes, 6 heightmaps,
 //! post-processing marks, tick counts) with `generate-structures=false` across Nether, End,
 //! tree-free Overworld biomes and forest-type Overworld biomes (trees, fallen trees, decorators)
-//! vs the user's own vanilla 26.3 server. Chunks that reach a fossil / template feature are
-//! excluded until the structures milestone provides template placement.
+//! vs the user's own vanilla 26.3 server. Fossil / template features run through the structure
+//! template placement of `zenith-structures`.
+//!
+//! `golden-structures` runs the same comparison with `generate-structures=true`: chunks around
+//! every structure type (pieces placed per decoration step), fossils and template features.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -19,17 +22,19 @@ use zenith_codec::log::null_log;
 use zenith_codec::resources::ZipPackResources;
 use zenith_data::Tables;
 use zenith_features::{
-    BlockOps, BlockPos, FeatureData, FeatureDecorator, FossilConfig, GenerationRegion,
-    TemplateConfig, TemplateFeatureHook, WorldgenRandom,
+    BlockOps, BlockPos, FeatureData, FeatureDecorator, FossilConfig, GenerationRegion, RegionChunk,
+    StructureInterleaveHook, StructurePlacementHook, StructureTemplateHook, TemplateConfig,
+    TemplateFeatureHook, WorldgenRandom,
 };
 use zenith_parity::SuiteResult;
 use zenith_registry::{BlockStateTable, Identifier};
+use zenith_structures::{BoundingBoxExt, StructureGenerator};
 use zenith_worldgen::{
-    BlockPredicates, BlockTags, DensityVolume, HeightmapKind, RandomState, RouterField,
-    TerrainChunk, TerrainGenerator, WorldgenData,
+    BlockPredicates, BlockTags, DensityVolume, HeightmapKind, NoiseGenerator, RandomState,
+    RouterField, TerrainChunk, TerrainGenerator, WorldgenData,
 };
 
-use crate::oracle::{ChunkRequest, ChunkWorld, dump_chunks, parse_chunk_dump};
+use crate::oracle::{ChunkRequest, ChunkWorld, DumpedChunk, dump_chunks, parse_chunk_dump};
 use crate::repo_root;
 
 const GOLDEN_SEEDS: &[i64] = &[12345, 0, -8_472_910_384_721];
@@ -113,74 +118,92 @@ const OVERWORLD_PRIORITY_BIOMES: &[&str] = &[
     "minecraft:deep_dark",
 ];
 
-/// Counts calls into the (still unimplemented) fossil / template placement hooks.
-#[derive(Debug, Default)]
-struct StubCallCounter {
-    template_calls: AtomicUsize,
+/// Counts calls into (and placements by) the fossil / template feature hooks.
+#[derive(Debug)]
+struct TemplateCounter {
+    inner: StructureTemplateHook,
+    calls: AtomicUsize,
+    placed: AtomicUsize,
+    fossils: AtomicUsize,
+    templates: AtomicUsize,
 }
 
-impl StubCallCounter {
+impl TemplateCounter {
+    fn new(inner: StructureTemplateHook) -> Self {
+        Self {
+            inner,
+            calls: AtomicUsize::new(0),
+            placed: AtomicUsize::new(0),
+            fossils: AtomicUsize::new(0),
+            templates: AtomicUsize::new(0),
+        }
+    }
+
     fn reset(&self) {
-        self.template_calls.store(0, Ordering::Relaxed);
+        self.calls.store(0, Ordering::Relaxed);
+        self.placed.store(0, Ordering::Relaxed);
+        self.fossils.store(0, Ordering::Relaxed);
+        self.templates.store(0, Ordering::Relaxed);
     }
 
-    fn total(&self) -> usize {
-        self.template_calls.load(Ordering::Relaxed)
+    fn fossil_placed(&self) -> usize {
+        self.fossils.load(Ordering::Relaxed)
+    }
+
+    fn template_placed(&self) -> usize {
+        self.templates.load(Ordering::Relaxed)
+    }
+
+    fn placed(&self) -> usize {
+        self.placed.load(Ordering::Relaxed)
     }
 }
 
-impl TemplateFeatureHook for StubCallCounter {
+impl TemplateFeatureHook for TemplateCounter {
     fn place_fossil(
         &self,
-        _config: &FossilConfig,
-        _region: &mut GenerationRegion,
-        _random: &mut WorldgenRandom,
-        _origin: BlockPos,
+        config: &FossilConfig,
+        region: &mut GenerationRegion,
+        random: &mut WorldgenRandom,
+        origin: BlockPos,
     ) -> bool {
-        self.template_calls.fetch_add(1, Ordering::Relaxed);
-        false
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let ok = self.inner.place_fossil(config, region, random, origin);
+        self.placed.fetch_add(usize::from(ok), Ordering::Relaxed);
+        self.fossils.fetch_add(usize::from(ok), Ordering::Relaxed);
+        ok
     }
 
     fn place_template(
         &self,
-        _config: &TemplateConfig,
-        _region: &mut GenerationRegion,
-        _random: &mut WorldgenRandom,
-        _origin: BlockPos,
+        config: &TemplateConfig,
+        region: &mut GenerationRegion,
+        random: &mut WorldgenRandom,
+        origin: BlockPos,
     ) -> bool {
-        self.template_calls.fetch_add(1, Ordering::Relaxed);
-        false
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let ok = self.inner.place_template(config, region, random, origin);
+        self.placed.fetch_add(usize::from(ok), Ordering::Relaxed);
+        self.templates.fetch_add(usize::from(ok), Ordering::Relaxed);
+        ok
     }
 }
 
-/// Overworld biomes that have neither `minecraft:tree` nor `minecraft:fallen_tree` nor
-/// `minecraft:template` features in their biome feature lists (checked dynamically against the
-/// loaded 26.3 datapack, plus surface-biome filtering for 3×3 neighborhoods).
+/// Biomes that have neither `minecraft:tree` nor `minecraft:fallen_tree` features in their biome
+/// feature lists (checked dynamically against the loaded 26.3 datapack, plus surface-biome
+/// filtering for 3×3 neighborhoods).
 fn biome_is_tree_and_template_free(data: &FeatureData, biome_id: &Identifier) -> bool {
     let Some(settings) = data.biome(biome_id) else {
         return false;
     };
     for step in &settings.features {
         for pf in step {
-            if feature_uses_tree_or_template(&pf.feature) {
+            if feature_uses_tree(&pf.feature) {
                 return false;
             }
         }
     }
     true
-}
-
-fn feature_uses_tree_or_template(feat: &zenith_features::Feature) -> bool {
-    use zenith_features::Feature;
-    feature_any(feat, &|f| {
-        matches!(
-            f,
-            Feature::Tree { .. }
-                | Feature::FallenTree { .. }
-                | Feature::Fossil(_)
-                | Feature::Template(_)
-        )
-    })
 }
 
 /// Whether `feat` (or any sub-feature it can place) is a `tree` / `fallen_tree`.
@@ -278,6 +301,10 @@ struct Tally {
     /// Blocks the features step changed vs. the terrain-only chunk (proves the suite exercises it).
     changed_blocks: u64,
     failures: Vec<String>,
+    /// Maximum number of failure messages kept (`0` = the default of 24).
+    failure_cap: usize,
+    /// Differing blocks listed per chunk in a blocks failure (`0` = the default of 12).
+    diff_limit: usize,
     /// Per reporting group: `(chunks fully identical, chunks compared)`.
     groups: BTreeMap<String, (u64, u64)>,
 }
@@ -287,7 +314,13 @@ impl Tally {
         self.total += 1;
         if ok {
             self.passed += 1;
-        } else if self.failures.len() < 24 {
+        } else if self.failures.len()
+            < if self.failure_cap == 0 {
+                24
+            } else {
+                self.failure_cap
+            }
+        {
             self.failures.push(what());
         }
     }
@@ -297,6 +330,8 @@ impl Tally {
         self.total += other.total;
         self.changed_blocks += other.changed_blocks;
         self.failures.extend(other.failures);
+        self.failure_cap = self.failure_cap.max(other.failure_cap);
+        self.diff_limit = self.diff_limit.max(other.diff_limit);
         for (g, (p, t)) in other.groups {
             let e = self.groups.entry(g).or_default();
             e.0 += p;
@@ -319,6 +354,9 @@ struct FeatureContextData {
     blocks: Arc<BlockStateTable>,
     tags: Arc<BlockTags>,
     ops: Arc<BlockOps>,
+    structure_data: Arc<zenith_structures::StructureData>,
+    templates: Arc<zenith_structures::TemplateManager>,
+    facts: Arc<BlockFacts>,
 }
 
 fn load_context(version: &str) -> anyhow::Result<FeatureContextData> {
@@ -353,9 +391,22 @@ fn load_context(version: &str) -> anyhow::Result<FeatureContextData> {
         BlockPredicates::new(&blocks, &tags)
             .map_err(|id| anyhow::anyhow!("missing predicate block {id}"))?,
     );
+    let structure_data = Arc::new(
+        zenith_structures::StructureData::load(&pack, worldgen.biome_tags())
+            .map_err(|e| anyhow::anyhow!("load structure data: {e}"))?,
+    );
+    let templates = Arc::new(zenith_structures::TemplateManager::new(
+        Arc::new(ZipPackResources::open(
+            "vanilla",
+            &install.client_jar,
+            null_log(),
+        )),
+        Arc::clone(&blocks),
+        Some(Arc::clone(&facts)),
+    ));
     let ops = Arc::new(BlockOps::new(
         Arc::clone(&blocks),
-        facts,
+        Arc::clone(&facts),
         Arc::clone(&tags),
         predicates,
     ));
@@ -369,6 +420,9 @@ fn load_context(version: &str) -> anyhow::Result<FeatureContextData> {
         blocks,
         tags,
         ops,
+        structure_data,
+        templates,
+        facts,
     })
 }
 
@@ -714,15 +768,9 @@ fn select_chunks_for_dim(
                     tchunks.push(pipe.terrain.generate_chunk(cx + dx, cz + dz));
                 }
             }
-            let refs: [&TerrainChunk; 9] = std::array::from_fn(|i| &tchunks[i]);
-            let mut region = pipe.decorator.make_region(cx, cz, refs);
-            pipe.stub_counter.reset();
-            pipe.decorator.decorate(&mut region, cx, cz);
-            if pipe.stub_counter.total() == 0 {
-                chosen.push((cx, cz));
-                chosen_biomes.push(b.to_string());
-                cached_3x3.insert((cx, cz), tchunks);
-            }
+            chosen.push((cx, cz));
+            chosen_biomes.push(b.to_string());
+            cached_3x3.insert((cx, cz), tchunks);
         }
     }
 
@@ -843,16 +891,10 @@ fn select_forest_chunks(
                         tchunks.push(pipe.terrain.generate_chunk(cx + dx, cz + dz));
                     }
                 }
-                let refs: [&TerrainChunk; 9] = std::array::from_fn(|i| &tchunks[i]);
-                let mut region = pipe.decorator.make_region(cx, cz, refs);
-                pipe.stub_counter.reset();
-                pipe.decorator.decorate(&mut region, cx, cz);
-                if pipe.stub_counter.total() == 0 {
-                    chosen.push((cx, cz));
-                    out.push(((cx, cz), biome.clone()));
-                    cached.insert((cx, cz), tchunks);
-                    break;
-                }
+                chosen.push((cx, cz));
+                out.push(((cx, cz), biome.clone()));
+                cached.insert((cx, cz), tchunks);
+                break;
             }
         }
     }
@@ -862,7 +904,9 @@ fn select_forest_chunks(
 struct DimPipeline {
     terrain: TerrainGenerator,
     decorator: FeatureDecorator,
-    stub_counter: Arc<StubCallCounter>,
+    template_counter: Arc<TemplateCounter>,
+    /// Structure placement hook (`generate-structures = true` pipelines only).
+    structures: Option<Arc<StructurePlacementHook>>,
     biome_source: BiomeSource,
     rs: RandomState,
     min_y: i32,
@@ -873,6 +917,7 @@ fn build_dim_pipeline(
     ctx: &FeatureContextData,
     dim: &str,
     seed: i64,
+    structures_on: bool,
 ) -> anyhow::Result<DimPipeline> {
     let (settings_id, dim_type_id, biome_source) = match dim {
         "minecraft:overworld" => (
@@ -921,9 +966,12 @@ fn build_dim_pipeline(
         .with_context(|| format!("missing noise settings {settings_id}"))?;
     let rs = RandomState::new(&ctx.worldgen, &settings_id, seed)
         .map_err(|e| anyhow::anyhow!("random state {dim}: {e}"))?;
-    let stub_counter = Arc::new(StubCallCounter::default());
+    let template_counter = Arc::new(TemplateCounter::new(StructureTemplateHook::new(
+        Arc::clone(&ctx.structure_data),
+        Arc::clone(&ctx.templates),
+    )));
     let template_hook: Arc<dyn TemplateFeatureHook> =
-        Arc::clone(&stub_counter) as Arc<dyn TemplateFeatureHook>;
+        Arc::clone(&template_counter) as Arc<dyn TemplateFeatureHook>;
     let decorator = FeatureDecorator::new(
         Arc::clone(&ctx.features),
         Arc::clone(&ctx.ops),
@@ -936,6 +984,34 @@ fn build_dim_pipeline(
     )
     .map_err(|e| anyhow::anyhow!("feature decorator {dim}: {e}"))?
     .with_template_hook(template_hook);
+    let (decorator, structures) = if structures_on {
+        let noise_gen = Arc::new(
+            NoiseGenerator::new(&ctx.worldgen, &settings_id, seed, &ctx.blocks, &ctx.tags)
+                .map_err(|e| anyhow::anyhow!("noise generator {dim}: {e}"))?,
+        );
+        let generator = Arc::new(StructureGenerator::new(
+            seed,
+            &ctx.worldgen,
+            Arc::clone(&ctx.structure_data),
+            Arc::clone(&ctx.templates),
+            noise_gen,
+            biome_source.clone(),
+            Arc::clone(&ctx.facts),
+            &ctx.blocks,
+            min_y,
+            height,
+        ));
+        let hook = Arc::new(StructurePlacementHook::new(
+            generator,
+            Arc::clone(&ctx.features),
+        ));
+        (
+            decorator.with_structure_hook(Arc::clone(&hook) as Arc<dyn StructureInterleaveHook>),
+            Some(hook),
+        )
+    } else {
+        (decorator, None)
+    };
     // Debug aid: `ZENITH_FEATURES_NOTREES=1` disables tree placement to isolate non-tree diffs.
     let decorator = if std::env::var_os("ZENITH_FEATURES_NOTREES").is_some() {
         decorator.with_tree_hook(Arc::new(zenith_features::NoopTreeHook))
@@ -946,12 +1022,334 @@ fn build_dim_pipeline(
     Ok(DimPipeline {
         terrain,
         decorator,
-        stub_counter,
+        template_counter,
+        structures,
         biome_source,
         rs,
         min_y,
         height,
     })
+}
+
+/// ` ; only vanilla: ... ; only zenith: ...` — the marks present on one side only, as world
+/// positions with the block (on the Zenith side) at the position.
+fn mark_difference(
+    ctx: &FeatureContextData,
+    dc: &DumpedChunk,
+    zc: &RegionChunk,
+    zen: &[(i32, u16)],
+) -> String {
+    let mut counts: HashMap<(i32, u16), i32> = HashMap::new();
+    for m in &dc.post_processing {
+        *counts.entry(*m).or_default() += 1;
+    }
+    for m in zen {
+        *counts.entry(*m).or_default() -= 1;
+    }
+    let desc = |(sec, packed): (i32, u16)| {
+        let (lx, ly, lz) = (
+            i32::from(packed & 15),
+            i32::from((packed >> 4) & 15),
+            i32::from((packed >> 8) & 15),
+        );
+        let y = dc.min_y + sec * 16 + ly;
+        let block = describe_state(&ctx.blocks, zc.get_block(lx as usize, y, lz as usize));
+        let block = block.split('[').next().unwrap_or("").to_owned();
+        format!(
+            "({},{},{}) {}",
+            (dc.x << 4) + lx,
+            y,
+            (dc.z << 4) + lz,
+            block.replace("minecraft:", "")
+        )
+    };
+    let mut only_van: Vec<String> = Vec::new();
+    let mut only_zen: Vec<String> = Vec::new();
+    let mut keys: Vec<_> = counts.iter().collect();
+    keys.sort();
+    for (k, &c) in keys {
+        if c > 0 {
+            only_van.push(format!("{}x{c}", desc(*k)));
+        } else if c < 0 {
+            only_zen.push(format!("{}x{}", desc(*k), -c));
+        }
+    }
+    // Order-only differences: list the sequences from the first differing entry.
+    let first = dc.post_processing.iter().zip(zen).position(|(a, b)| a != b);
+    let seq_len = if std::env::var_os("ZENITH_FEATURES_FULLSEQ").is_some() {
+        usize::MAX
+    } else {
+        10
+    };
+    let seq = if let Some(i) = first {
+        let st = if seq_len == usize::MAX { 0 } else { i };
+        let v: Vec<String> = dc.post_processing[st..]
+            .iter()
+            .take(seq_len)
+            .map(|m| desc(*m))
+            .collect();
+        let z: Vec<String> = zen[st..].iter().take(seq_len).map(|m| desc(*m)).collect();
+        format!(
+            " ; van seq: [{}] ; zen seq: [{}]",
+            v.join(" | "),
+            z.join(" | ")
+        )
+    } else {
+        String::new()
+    };
+    seq + &format!(
+        " ; only vanilla: [{}] ; only zenith: [{}]",
+        only_van
+            .iter()
+            .take(16)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", "),
+        only_zen
+            .iter()
+            .take(16)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+/// Compares one dumped vanilla chunk with Zenith's decorated chunk (blocks, biomes, 6 heightmaps,
+/// post-processing marks, tick counts); returns whether every part is identical.
+/// `base_blocks` is the terrain-only block array (debug output of what the step changed), may be empty.
+fn compare_chunk(
+    ctx: &FeatureContextData,
+    t: &mut Tally,
+    dc: &DumpedChunk,
+    zc: &RegionChunk,
+    base_blocks: &[u32],
+    tag: &str,
+) -> bool {
+    let (passed_before, total_before) = (t.passed, t.total);
+    t.changed_blocks += zc
+        .blocks()
+        .iter()
+        .zip(base_blocks)
+        .filter(|(a, b)| a != b)
+        .count() as u64;
+
+    // 1. Blocks
+    let blocks_ok =
+        dc.min_y == zc.min_y() && dc.height == zc.height() && dc.blocks.as_slice() == zc.blocks();
+    if let Ok(v) = std::env::var("ZENITH_FEATURES_NEIGH") {
+        let p: Vec<i32> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+        if p.len() == 3 && (p[0] >> 4) == dc.x && (p[2] >> 4) == dc.z {
+            for (dx, dy, dz) in [
+                (0, 0, 0),
+                (1, 0, 0),
+                (-1, 0, 0),
+                (0, 0, 1),
+                (0, 0, -1),
+                (0, 1, 0),
+                (0, -1, 0),
+            ] {
+                let (x, y, z) = (p[0] + dx, p[1] + dy, p[2] + dz);
+                if (x >> 4) != dc.x || (z >> 4) != dc.z {
+                    continue;
+                }
+                let (lx, lz) = ((x & 15) as usize, (z & 15) as usize);
+                let ly = (y - dc.min_y) as usize;
+                let idx = (ly / 16) * 4096 + ((ly % 16) * 16 + lz) * 16 + lx;
+                println!(
+                    "NEIGH ({dx},{dy},{dz}) vanilla {} | zenith {}",
+                    describe_state(&ctx.blocks, dc.blocks[idx]),
+                    describe_state(&ctx.blocks, zc.blocks()[idx])
+                );
+            }
+        }
+    }
+    if let Ok(name) = std::env::var("ZENITH_FEATURES_COLMAP")
+        && !dc.blocks.as_slice().eq(zc.blocks())
+    {
+        // Top-down map of the highest block called `name` per column: vanilla | zenith.
+        let height = dc.blocks.len() / 256;
+        let top = |blocks: &[u32], lx: usize, lz: usize| -> char {
+            for ly in (0..height).rev() {
+                let idx = (ly / 16) * 4096 + ((ly % 16) * 16 + lz) * 16 + lx;
+                if describe_state(&ctx.blocks, blocks[idx])
+                    .starts_with(&format!("minecraft:{name}"))
+                {
+                    return char::from_digit(((dc.min_y + ly as i32).rem_euclid(10)) as u32, 10)
+                        .unwrap_or('?');
+                }
+            }
+            '.'
+        };
+        println!("COLMAP {tag} (last digit of highest {name}; vanilla | zenith)");
+        for lz in 0..16 {
+            let v: String = (0..16).map(|lx| top(&dc.blocks, lx, lz)).collect();
+            let z: String = (0..16).map(|lx| top(zc.blocks(), lx, lz)).collect();
+            println!("  z={lz:2} {v} | {z}");
+        }
+    }
+    let diff_limit = if t.diff_limit == 0 { 12 } else { t.diff_limit };
+    t.check(blocks_ok, || {
+        match dc
+            .blocks
+            .iter()
+            .zip(zc.blocks())
+            .position(|(a, b)| a != b)
+        {
+            Some(idx) => {
+                let sec = idx / 4096;
+                let rem = idx % 4096;
+                let ly = rem / 256;
+                let lz = (rem % 256) / 16;
+                let lx = rem % 16;
+                let wx = (dc.x << 4) + lx as i32;
+                let wy = dc.min_y + (sec * 16 + ly) as i32;
+                let wz = (dc.z << 4) + lz as i32;
+                let biome = zc
+                    .biome_at_quart(lx >> 2, (sec * 16 + ly) >> 2, lz >> 2)
+                    .map_or_else(|| "?".to_owned(), ToString::to_string);
+                let diffs: Vec<String> = dc
+                    .blocks
+                    .iter()
+                    .zip(zc.blocks())
+                    .enumerate()
+                    .filter(|(_, (a, b))| a != b)
+                    .map(|(i, (a, b))| {
+                        let (s, r) = (i / 4096, i % 4096);
+                        format!(
+                            "({},{},{}) {}→{}",
+                            (dc.x << 4) + (r % 16) as i32,
+                            dc.min_y + (s * 16 + r / 256) as i32,
+                            (dc.z << 4) + ((r % 256) / 16) as i32,
+                            describe_state(&ctx.blocks, *a),
+                            describe_state(&ctx.blocks, *b)
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{tag} blocks: first diff at ({wx},{wy},{wz}) [biome {biome}]: vanilla {} | zenith {}; {} blocks differ: {}",
+                    describe_state(&ctx.blocks, dc.blocks[idx]),
+                    describe_state(&ctx.blocks, zc.blocks()[idx]),
+                    diffs.len(),
+                    diffs.iter().take(diff_limit).cloned().collect::<Vec<_>>().join(", ")
+                )
+            }
+            None => format!(
+                "{tag} blocks: length vanilla {} | zenith {}",
+                dc.blocks.len(),
+                zc.blocks().len()
+            ),
+        }
+    });
+
+    if !blocks_ok && std::env::var_os("ZENITH_FEATURES_DUMP").is_some() {
+        dump_diff_region(
+            &ctx.blocks,
+            dc.min_y,
+            dc.x,
+            dc.z,
+            &dc.blocks,
+            zc.blocks(),
+            tag,
+        );
+    }
+
+    // 2. Biomes
+    let zen_biomes: Vec<String> = zc.biomes_iter().map(ToString::to_string).collect();
+    t.check(dc.biomes == zen_biomes, || format!("{tag} biomes differ"));
+
+    // 3. Heightmaps (6 total)
+    for (hm_name, van_heights) in &dc.heightmaps {
+        let kind = heightmap_kind_from_name(hm_name);
+        let zen_hm = kind.map(|k| zc.heightmap(k));
+        let ok = zen_hm.is_some_and(|h| h.heights().as_slice() == van_heights.as_slice());
+        t.check(ok, || match zen_hm {
+            Some(h) => match van_heights.iter().zip(h.heights()).position(|(a, b)| a != b) {
+                Some(idx) => format!(
+                    "{tag} heightmap {hm_name}: first diff at local ({},{}): vanilla {} | zenith {}",
+                    idx % 16,
+                    idx / 16,
+                    van_heights[idx],
+                    h.heights()[idx]
+                ),
+                None => format!("{tag} heightmap {hm_name}: length mismatch"),
+            },
+            None => format!("{tag} heightmap {hm_name}: missing on Zenith"),
+        });
+    }
+
+    // 4. Post-processing marks
+    let zen_marks: Vec<(i32, u16)> = zc
+        .post_processing_marks()
+        .into_iter()
+        .map(|m| (m.section, m.packed))
+        .collect();
+    t.check(dc.post_processing == zen_marks, || {
+        let head = match dc
+            .post_processing
+            .iter()
+            .zip(&zen_marks)
+            .position(|(a, b)| a != b)
+        {
+            Some(idx) => format!(
+                "{tag} post_processing: first diff at #{idx} (len van {} / zen {}): vanilla {:?} | zenith {:?}",
+                dc.post_processing.len(),
+                zen_marks.len(),
+                dc.post_processing[idx],
+                zen_marks[idx]
+            ),
+            None => format!(
+                "{tag} post_processing: len vanilla {} | zenith {}",
+                dc.post_processing.len(),
+                zen_marks.len()
+            ),
+        };
+        head + &mark_difference(ctx, dc, zc, &zen_marks)
+    });
+
+    // 5. Scheduled tick counts
+    let ticks_ok =
+        dc.block_ticks == zc.block_tick_count() && dc.fluid_ticks == zc.fluid_tick_count();
+    if !ticks_ok && std::env::var_os("ZENITH_FEATURES_DUMP").is_some() {
+        let mut by_block: BTreeMap<u32, usize> = BTreeMap::new();
+        for (_, _, _, b) in zc.scheduled_block_ticks() {
+            *by_block.entry(b).or_default() += 1;
+        }
+        let named: Vec<String> = by_block
+            .iter()
+            .map(|(b, n)| {
+                let name = ctx
+                    .blocks
+                    .blocks()
+                    .get(*b as usize)
+                    .map_or_else(|| format!("#{b}"), |e| e.id.to_string());
+                format!("{name}={n}")
+            })
+            .collect();
+        println!(
+            "--- {tag}: zenith feature-step block ticks: {}",
+            named.join(", ")
+        );
+        let mut changed: BTreeMap<String, usize> = BTreeMap::new();
+        for (a, b) in zc.blocks().iter().zip(base_blocks) {
+            if a != b {
+                let n = describe_state(&ctx.blocks, *a);
+                let n = n.split('[').next().unwrap_or("").to_owned();
+                *changed.entry(n).or_default() += 1;
+            }
+        }
+        println!("--- {tag}: blocks written by features: {changed:?}");
+    }
+    t.check(ticks_ok, || {
+        format!(
+            "{tag} ticks: vanilla ({}, {}) | zenith ({}, {})",
+            dc.block_ticks,
+            dc.fluid_ticks,
+            zc.block_tick_count(),
+            zc.fluid_tick_count()
+        )
+    });
+
+    t.passed - passed_before == t.total - total_before
 }
 
 fn run_world_job(
@@ -978,7 +1376,7 @@ fn run_world_job(
         {
             continue;
         }
-        let pipe = build_dim_pipeline(ctx, dim, seed)?;
+        let pipe = build_dim_pipeline(ctx, dim, seed, false)?;
         let target_chunks = if dim == "minecraft:overworld" { 12 } else { 8 };
         let (coords, cached, biomes) =
             select_chunks_for_dim(&pipe, &ctx.features, seed, dim, target_chunks);
@@ -1163,7 +1561,7 @@ fn run_world_job(
         let t1 = Instant::now();
         let refs: [&TerrainChunk; 9] = std::array::from_fn(|i| &tchunks[i]);
         let mut region = decorator.make_region(dc.x, dc.z, refs);
-        pipe.stub_counter.reset();
+        pipe.template_counter.reset();
         decorator.decorate(&mut region, dc.x, dc.z);
         if !neighbor_checks.is_empty() && !neighbor_checks.contains(&(dc.x, dc.z)) {
             for (i, rc) in region.chunks().iter().enumerate() {
@@ -1177,179 +1575,15 @@ fn run_world_job(
         features_us += t1.elapsed().as_micros();
 
         let tag = format!("{} seed {seed} ({},{})", dc.dimension, dc.x, dc.z);
-        let (passed_before, total_before) = (t.passed, t.total);
-        t.changed_blocks += zc
-            .blocks()
-            .iter()
-            .zip(tchunks[4].blocks())
-            .filter(|(a, b)| a != b)
-            .count() as u64;
-
-        // 1. Blocks
-        let blocks_ok = dc.min_y == zc.min_y()
-            && dc.height == zc.height()
-            && dc.blocks.as_slice() == zc.blocks();
-        t.check(blocks_ok, || {
-            match dc
-                .blocks
-                .iter()
-                .zip(zc.blocks())
-                .position(|(a, b)| a != b)
-            {
-                Some(idx) => {
-                    let sec = idx / 4096;
-                    let rem = idx % 4096;
-                    let ly = rem / 256;
-                    let lz = (rem % 256) / 16;
-                    let lx = rem % 16;
-                    let wx = (dc.x << 4) + lx as i32;
-                    let wy = dc.min_y + (sec * 16 + ly) as i32;
-                    let wz = (dc.z << 4) + lz as i32;
-                    let biome = zc
-                        .biome_at_quart(lx >> 2, (sec * 16 + ly) >> 2, lz >> 2)
-                        .map_or_else(|| "?".to_owned(), ToString::to_string);
-                    let diffs: Vec<String> = dc
-                        .blocks
-                        .iter()
-                        .zip(zc.blocks())
-                        .enumerate()
-                        .filter(|(_, (a, b))| a != b)
-                        .map(|(i, (a, b))| {
-                            let (s, r) = (i / 4096, i % 4096);
-                            format!(
-                                "({},{},{}) {}→{}",
-                                (dc.x << 4) + (r % 16) as i32,
-                                dc.min_y + (s * 16 + r / 256) as i32,
-                                (dc.z << 4) + ((r % 256) / 16) as i32,
-                                describe_state(&ctx.blocks, *a),
-                                describe_state(&ctx.blocks, *b)
-                            )
-                        })
-                        .collect();
-                    format!(
-                        "{tag} blocks: first diff at ({wx},{wy},{wz}) [biome {biome}]: vanilla {} | zenith {}; {} blocks differ: {}",
-                        describe_state(&ctx.blocks, dc.blocks[idx]),
-                        describe_state(&ctx.blocks, zc.blocks()[idx]),
-                        diffs.len(),
-                        diffs.iter().take(12).cloned().collect::<Vec<_>>().join(", ")
-                    )
-                }
-                None => format!(
-                    "{tag} blocks: length vanilla {} | zenith {}",
-                    dc.blocks.len(),
-                    zc.blocks().len()
-                ),
-            }
-        });
-
-        if !blocks_ok && std::env::var_os("ZENITH_FEATURES_DUMP").is_some() {
-            dump_diff_region(
-                &ctx.blocks,
-                dc.min_y,
-                dc.x,
-                dc.z,
-                &dc.blocks,
-                zc.blocks(),
-                &tag,
-            );
+        let chunk_ok = compare_chunk(ctx, &mut t, dc, &zc, tchunks[4].blocks(), &tag);
+        if pipe.template_counter.placed() > 0 {
+            let e = t
+                .groups
+                .entry("fossil/template placed".to_owned())
+                .or_default();
+            e.1 += 1;
+            e.0 += u64::from(chunk_ok);
         }
-
-        // 2. Biomes
-        let zen_biomes: Vec<String> = zc.biomes_iter().map(ToString::to_string).collect();
-        t.check(dc.biomes == zen_biomes, || format!("{tag} biomes differ"));
-
-        // 3. Heightmaps (6 total)
-        for (hm_name, van_heights) in &dc.heightmaps {
-            let kind = heightmap_kind_from_name(hm_name);
-            let zen_hm = kind.map(|k| zc.heightmap(k));
-            let ok = zen_hm.is_some_and(|h| h.heights().as_slice() == van_heights.as_slice());
-            t.check(ok, || match zen_hm {
-                Some(h) => match van_heights.iter().zip(h.heights()).position(|(a, b)| a != b) {
-                    Some(idx) => format!(
-                        "{tag} heightmap {hm_name}: first diff at local ({},{}): vanilla {} | zenith {}",
-                        idx % 16,
-                        idx / 16,
-                        van_heights[idx],
-                        h.heights()[idx]
-                    ),
-                    None => format!("{tag} heightmap {hm_name}: length mismatch"),
-                },
-                None => format!("{tag} heightmap {hm_name}: missing on Zenith"),
-            });
-        }
-
-        // 4. Post-processing marks
-        let zen_marks: Vec<(i32, u16)> = zc
-            .post_processing_marks()
-            .into_iter()
-            .map(|m| (m.section, m.packed))
-            .collect();
-        t.check(dc.post_processing == zen_marks, || {
-            match dc
-                .post_processing
-                .iter()
-                .zip(&zen_marks)
-                .position(|(a, b)| a != b)
-            {
-                Some(idx) => format!(
-                    "{tag} post_processing: first diff at #{idx} (len van {} / zen {}): vanilla {:?} | zenith {:?}",
-                    dc.post_processing.len(),
-                    zen_marks.len(),
-                    dc.post_processing[idx],
-                    zen_marks[idx]
-                ),
-                None => format!(
-                    "{tag} post_processing: len vanilla {} | zenith {}",
-                    dc.post_processing.len(),
-                    zen_marks.len()
-                ),
-            }
-        });
-
-        // 5. Scheduled tick counts
-        let ticks_ok =
-            dc.block_ticks == zc.block_tick_count() && dc.fluid_ticks == zc.fluid_tick_count();
-        if !ticks_ok && std::env::var_os("ZENITH_FEATURES_DUMP").is_some() {
-            let mut by_block: BTreeMap<u32, usize> = BTreeMap::new();
-            for (_, _, _, b) in zc.scheduled_block_ticks() {
-                *by_block.entry(b).or_default() += 1;
-            }
-            let named: Vec<String> = by_block
-                .iter()
-                .map(|(b, n)| {
-                    let name = ctx
-                        .blocks
-                        .blocks()
-                        .get(*b as usize)
-                        .map_or_else(|| format!("#{b}"), |e| e.id.to_string());
-                    format!("{name}={n}")
-                })
-                .collect();
-            println!(
-                "--- {tag}: zenith feature-step block ticks: {}",
-                named.join(", ")
-            );
-            let mut changed: BTreeMap<String, usize> = BTreeMap::new();
-            for (a, b) in zc.blocks().iter().zip(tchunks[4].blocks()) {
-                if a != b {
-                    let n = describe_state(&ctx.blocks, *a);
-                    let n = n.split('[').next().unwrap_or("").to_owned();
-                    *changed.entry(n).or_default() += 1;
-                }
-            }
-            println!("--- {tag}: blocks written by features: {changed:?}");
-        }
-        t.check(ticks_ok, || {
-            format!(
-                "{tag} ticks: vanilla ({}, {}) | zenith ({}, {})",
-                dc.block_ticks,
-                dc.fluid_ticks,
-                zc.block_tick_count(),
-                zc.fluid_tick_count()
-            )
-        });
-
-        let chunk_ok = t.passed - passed_before == t.total - total_before;
         let label = labels
             .get(&(dc.dimension.clone(), dc.x, dc.z))
             .cloned()
@@ -1561,7 +1795,7 @@ pub fn golden_features(version: &str, write: bool) -> anyhow::Result<bool> {
     );
 
     println!(
-        "golden-features {version}: {}/{} identical (blocks, biomes, 6 heightmaps, post-processing marks, ticks; {} seeds, structures off, fossil/template-free chunks)",
+        "golden-features {version}: {}/{} identical (blocks, biomes, 6 heightmaps, post-processing marks, ticks; {} seeds, structures off)",
         tally.passed,
         tally.total,
         seeds.len()
@@ -1574,6 +1808,571 @@ pub fn golden_features(version: &str, write: bool) -> anyhow::Result<bool> {
     }
     if write {
         SuiteResult::new("golden-features", version, tally.passed, tally.total)
+            .write(&repo_root().join("progress/parity"))?;
+    }
+    Ok(tally.passed == tally.total)
+}
+
+// ===========================================================================
+// golden-structures: features chunks with `generate-structures=true`
+// ===========================================================================
+
+/// Structure types whose pieces span many chunks: several chunks per start are compared.
+const BIG_STRUCTURES: &[&str] = &[
+    "village_plains",
+    "village_desert",
+    "village_savanna",
+    "village_snowy",
+    "village_taiga",
+    "stronghold",
+    "mansion",
+    "monument",
+    "fortress",
+    "bastion_remnant",
+    "ancient_city",
+    "trial_chambers",
+    "end_city",
+    "mineshaft",
+    "mineshaft_mesa",
+    "pillager_outpost",
+    "shipwreck",
+    "ocean_ruin_cold",
+    "ocean_ruin_warm",
+];
+
+/// Starts picked per structure id, and chunks compared per start (big structures / others).
+const STRUCT_PER_ID: usize = 3;
+const CHUNKS_PER_BIG_START: usize = 8;
+const CHUNKS_PER_START: usize = 3;
+/// Random-spread candidate chunks examined per structure set while searching for starts.
+const STRUCT_MAX_CHECKS: usize = 500;
+const STRUCT_MAX_RADIUS: i32 = 60;
+/// Template / fossil chunks wanted per seed (overworld) and how many candidates are scanned.
+const TEMPLATE_CHUNKS_PER_SEED: usize = 8;
+const TEMPLATE_SCAN: usize = 600;
+
+/// Chunks (raster order) that a piece of `start` intersects (the pieces, not the inflated box).
+fn start_piece_chunks(start: &zenith_structures::StructureStart) -> Vec<(i32, i32)> {
+    let mut set: std::collections::BTreeSet<(i32, i32)> = std::collections::BTreeSet::new();
+    for p in &start.pieces {
+        let bb = p.bounding_box;
+        for cz in (bb.min_z >> 4)..=(bb.max_z >> 4) {
+            for cx in (bb.min_x >> 4)..=(bb.max_x >> 4) {
+                set.insert((cz, cx));
+            }
+        }
+    }
+    set.into_iter().map(|(z, x)| (x, z)).collect()
+}
+
+/// Structure types (path names) whose pieces intersect chunk `(cx, cz)`, from the shared starts.
+fn types_at_chunk(
+    store: &zenith_features::StartStore,
+    cx: i32,
+    cz: i32,
+) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    for sx in (cx - 8)..=(cx + 8) {
+        for sz in (cz - 8)..=(cz + 8) {
+            if let Some(starts) = store.get(&(sx, sz)) {
+                for s in starts {
+                    if s.is_valid()
+                        && s.pieces.iter().any(|p| {
+                            p.bounding_box.intersects_xz(
+                                cx << 4,
+                                cz << 4,
+                                (cx << 4) + 15,
+                                (cz << 4) + 15,
+                            )
+                        })
+                    {
+                        out.insert(s.structure_id.path().to_owned());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Starts of every structure type of the dimension (`STRUCT_PER_ID` each where the world has
+/// them), found with `zenith-structures`; vanilla verifies the placed pieces.
+fn pick_structure_starts(
+    gen_: &zenith_structures::StructureGenerator,
+    store: &mut zenith_features::StartStore,
+    seed: i64,
+) -> Vec<zenith_structures::StructureStart> {
+    use zenith_structures::{StructurePlacement, StructureRef, potential_random_spread_chunk};
+    let mut picked: Vec<zenith_structures::StructureStart> = Vec::new();
+    let sets: Vec<_> = gen_.placement_state().possible_structure_sets().to_vec();
+    for set in &sets {
+        let ids: Vec<Identifier> = set
+            .structures
+            .iter()
+            .map(|e| match &e.structure {
+                StructureRef::Reference(id) => id.clone(),
+                StructureRef::Inline(d) => d.id.clone(),
+            })
+            .collect();
+        let mut counts: BTreeMap<Identifier, usize> = BTreeMap::new();
+        let satisfied = |c: &BTreeMap<Identifier, usize>| {
+            ids.iter()
+                .all(|id| c.get(id).copied().unwrap_or(0) >= STRUCT_PER_ID)
+        };
+        let mut take = |cx: i32,
+                        cz: i32,
+                        counts: &mut BTreeMap<Identifier, usize>,
+                        store: &mut zenith_features::StartStore| {
+            let starts = store
+                .entry((cx, cz))
+                .or_insert_with(|| gen_.structure_starts(cx, cz));
+            for s in starts.iter() {
+                if s.is_valid() && ids.contains(&s.structure_id) {
+                    let c = counts.entry(s.structure_id.clone()).or_insert(0);
+                    if *c < STRUCT_PER_ID {
+                        *c += 1;
+                        picked.push(s.clone());
+                    }
+                }
+            }
+        };
+        match &set.placement {
+            StructurePlacement::DimensionOrigin => {}
+            StructurePlacement::ConcentricRings { .. } => {
+                for (cx, cz) in gen_.ring_positions_for(set).into_iter().take(24) {
+                    take(cx, cz, &mut counts, store);
+                    if satisfied(&counts) {
+                        break;
+                    }
+                }
+            }
+            StructurePlacement::RandomSpread {
+                common,
+                spacing,
+                separation,
+                spread_type,
+            } => {
+                let mut checked = 0usize;
+                'rings: for r in 0..=STRUCT_MAX_RADIUS {
+                    for gx in -r..=r {
+                        for gz in -r..=r {
+                            if gx.abs().max(gz.abs()) != r {
+                                continue;
+                            }
+                            let (cx, cz) = potential_random_spread_chunk(
+                                seed,
+                                gx * spacing,
+                                gz * spacing,
+                                *spacing,
+                                *separation,
+                                *spread_type,
+                                common.salt,
+                            );
+                            // Stay away from the world spawn (the server generates it fully).
+                            if cx.abs() <= 40 && cz.abs() <= 40 {
+                                continue;
+                            }
+                            if !gen_.is_structure_chunk(set, cx, cz) {
+                                continue;
+                            }
+                            checked += 1;
+                            take(cx, cz, &mut counts, store);
+                            if checked >= STRUCT_MAX_CHECKS || satisfied(&counts) {
+                                break 'rings;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    picked
+}
+
+/// Chunks to compare for the picked starts: for each start its own chunk and chunks spread over
+/// its pieces (more of them for the big structure types).
+fn structure_chunks(
+    picked: &[zenith_structures::StructureStart],
+    taken: &mut HashSet<(i32, i32)>,
+) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    for s in picked {
+        let all = start_piece_chunks(s);
+        let budget = if BIG_STRUCTURES.contains(&s.structure_id.path()) {
+            CHUNKS_PER_BIG_START
+        } else {
+            CHUNKS_PER_START
+        };
+        let mut chosen: Vec<(i32, i32)> = Vec::new();
+        if all.contains(&(s.chunk_x, s.chunk_z)) {
+            chosen.push((s.chunk_x, s.chunk_z));
+        }
+        let n = all.len();
+        let take = budget.min(n);
+        for i in 0..take {
+            if chosen.len() >= budget {
+                break;
+            }
+            let c = all[(i * n + n / 2) / take.max(1) % n.max(1)];
+            if !chosen.contains(&c) {
+                chosen.push(c);
+            }
+        }
+        for c in chosen {
+            // The vanilla server generates the area around the spawn completely.
+            if (c.0.abs() > 32 || c.1.abs() > 32) && taken.insert(c) {
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// Overworld chunks whose features step calls a fossil / template feature (found with a
+/// structure-free decoration pass), preferring biomes that carry those features.
+fn pick_template_chunks(
+    pipe: &DimPipeline,
+    data: &FeatureData,
+    seed: i64,
+    taken: &HashSet<(i32, i32)>,
+) -> Vec<(i32, i32)> {
+    let mut rng = crate::parity_terrain::Lcg::new((seed as u64) ^ 0x7E3F_1A55_C0DE_0001);
+    let has_template = |id: &Identifier| {
+        data.biome(id).is_some_and(|b| {
+            b.features.iter().flatten().any(|pf| {
+                feature_any(&pf.feature, &|f| {
+                    matches!(
+                        f,
+                        zenith_features::Feature::Fossil(_) | zenith_features::Feature::Template(_)
+                    )
+                })
+            })
+        })
+    };
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    let (mut fossils, mut templates) = (0usize, 0usize);
+    for _ in 0..TEMPLATE_SCAN {
+        if out.len() >= TEMPLATE_CHUNKS_PER_SEED {
+            break;
+        }
+        let cx = rng.range(-900, 900) as i32;
+        let cz = rng.range(-900, 900) as i32;
+        if cx.abs() <= 32 && cz.abs() <= 32 {
+            continue;
+        }
+        if taken.contains(&(cx, cz)) || !well_spaced(&out, cx, cz) {
+            continue;
+        }
+        let Some(b) = quick_surface_biome(&pipe.biome_source, &pipe.rs, cx, cz) else {
+            continue;
+        };
+        if !has_template(&b) {
+            continue;
+        }
+        let mut tchunks = Vec::with_capacity(9);
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                tchunks.push(pipe.terrain.generate_chunk(cx + dx, cz + dz));
+            }
+        }
+        let refs: [&TerrainChunk; 9] = std::array::from_fn(|i| &tchunks[i]);
+        let mut region = pipe.decorator.make_region(cx, cz, refs);
+        pipe.template_counter.reset();
+        pipe.decorator.decorate(&mut region, cx, cz);
+        let (f, t) = (
+            pipe.template_counter.fossil_placed(),
+            pipe.template_counter.template_placed(),
+        );
+        // Wanted: placements; keep the mix balanced between fossils and templates.
+        if f + t > 0 && (f == 0 || fossils <= templates || t > 0) {
+            fossils += usize::from(f > 0);
+            templates += usize::from(t > 0);
+            out.push((cx, cz));
+        }
+    }
+    out
+}
+
+fn run_structures_world_job(
+    ctx: &FeatureContextData,
+    version: &str,
+    seed: i64,
+    timing: &Mutex<Timing>,
+) -> anyhow::Result<Tally> {
+    let mut t = Tally {
+        failure_cap: 400,
+        diff_limit: 120,
+        ..Tally::default()
+    };
+    let dims = [
+        "minecraft:overworld",
+        "minecraft:the_nether",
+        "minecraft:the_end",
+    ];
+    let mut pipes: HashMap<&str, DimPipeline> = HashMap::new();
+    let mut requests: Vec<ChunkRequest> = Vec::new();
+    let mut labels: HashMap<(String, i32, i32), &'static str> = HashMap::new();
+
+    for &dim in &dims {
+        let pipe = build_dim_pipeline(ctx, dim, seed, true)?;
+        let hook = pipe.structures.as_ref().expect("structures on");
+        let mut picked = hook.with_starts(|g, store| pick_structure_starts(g, store, seed));
+        // Debug aid: `ZENITH_STRUCT_ONLY=a,b` keeps only starts whose structure id contains a
+        // listed word (and the fossil/template chunks when `fossil` is listed).
+        let only: Option<Vec<String>> = std::env::var("ZENITH_STRUCT_ONLY")
+            .ok()
+            .map(|v| v.split(',').map(|x| x.trim().to_owned()).collect());
+        if let Some(words) = &only {
+            picked.retain(|s| {
+                words
+                    .iter()
+                    .any(|w| s.structure_id.path().contains(w.as_str()))
+            });
+        }
+        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+        for s in &picked {
+            *counts.entry(s.structure_id.path().to_owned()).or_default() += 1;
+        }
+        let mut taken: HashSet<(i32, i32)> = HashSet::new();
+        let mut chunks = structure_chunks(&picked, &mut taken);
+        // Debug aid: `ZENITH_STRUCT_NEIGHBORS=1` also compares the 8 neighbours of every chunk
+        // (requested after all the primary chunks).
+        if std::env::var_os("ZENITH_STRUCT_NEIGHBORS").is_some() {
+            let primary = chunks.clone();
+            for &(cx, cz) in &primary {
+                for dz in -1..=1 {
+                    for dx in -1..=1 {
+                        let c = (cx + dx, cz + dz);
+                        if taken.insert(c) && (c.0.abs() > 32 || c.1.abs() > 32) {
+                            chunks.push(c);
+                        }
+                    }
+                }
+            }
+        }
+        println!(
+            "  select {dim} seed {seed}: {} starts of {} structure types, {} chunks",
+            picked.len(),
+            counts.len(),
+            chunks.len()
+        );
+        for &(cx, cz) in &chunks {
+            labels.insert((dim.to_owned(), cx, cz), "structure");
+            requests.push(ChunkRequest {
+                dimension: dim.to_owned(),
+                x: cx,
+                z: cz,
+                status: "features".to_owned(),
+            });
+        }
+        if dim == "minecraft:overworld"
+            && only
+                .as_ref()
+                .is_none_or(|w| w.iter().any(|x| x == "fossil"))
+        {
+            // Fossil / template chunks come last in the request order, away from every structure.
+            let plain = build_dim_pipeline(ctx, dim, seed, false)?;
+            let mut near: HashSet<(i32, i32)> = HashSet::new();
+            for &(cx, cz) in &taken {
+                for dz in -3..=3 {
+                    for dx in -3..=3 {
+                        near.insert((cx + dx, cz + dz));
+                    }
+                }
+            }
+            let tpl = pick_template_chunks(&plain, &ctx.features, seed, &near);
+            println!(
+                "  select {dim} seed {seed}: {} fossil/template chunks",
+                tpl.len()
+            );
+            for (cx, cz) in tpl {
+                labels.insert((dim.to_owned(), cx, cz), "fossil/template");
+                requests.push(ChunkRequest {
+                    dimension: dim.to_owned(),
+                    x: cx,
+                    z: cz,
+                    status: "features".to_owned(),
+                });
+            }
+        }
+        pipes.insert(dim, pipe);
+    }
+
+    let world = ChunkWorld {
+        seed,
+        level_type: "minecraft:normal".to_owned(),
+        structures: true,
+    };
+    let van_start = Instant::now();
+    let raw = dump_chunks(version, &world, &requests)?;
+    let van_ms = van_start.elapsed().as_millis();
+    let dumped = parse_chunk_dump(&raw)?;
+    anyhow::ensure!(
+        dumped.len() == requests.len(),
+        "dumped chunk count {} != requested {}",
+        dumped.len(),
+        requests.len()
+    );
+
+    // Chunk state carried over between requests, in request order (like the vanilla server's
+    // chunks): a later chunk's decoration sees what earlier decorations wrote into it.
+    let mut world_chunks: HashMap<(&str, i32, i32), RegionChunk> = HashMap::new();
+    let (mut terrain_us, mut features_us) = (0u128, 0u128);
+    for dc in &dumped {
+        let dim: &str = dims
+            .iter()
+            .copied()
+            .find(|d| *d == dc.dimension)
+            .with_context(|| format!("unexpected dimension {}", dc.dimension))?;
+        let pipe = &pipes[dim];
+        let hook = pipe.structures.as_ref().expect("structures on");
+        let t0 = Instant::now();
+        let mut chunks: Vec<RegionChunk> = Vec::with_capacity(9);
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                let key = (dim, dc.x + dx, dc.z + dz);
+                let rc = match world_chunks.remove(&key) {
+                    Some(rc) => rc,
+                    None => {
+                        let beard = hook.beardifier_for_chunk(key.1, key.2);
+                        let sampler: Option<Arc<dyn zenith_worldgen::ContextSampler>> =
+                            if beard.is_empty() {
+                                None
+                            } else {
+                                Some(Arc::new(beard))
+                            };
+                        let tc = pipe.terrain.generate_chunk_with_hooks(
+                            key.1,
+                            key.2,
+                            sampler,
+                            &zenith_worldgen::Blender::empty(),
+                        );
+                        RegionChunk::from_terrain_chunk(&tc, &ctx.ops)
+                    }
+                };
+                chunks.push(rc);
+            }
+        }
+        terrain_us += t0.elapsed().as_micros();
+
+        let t1 = Instant::now();
+        let arr: [RegionChunk; 9] = chunks
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("region chunk count"))?;
+        let mut region = pipe.decorator.make_region_from_chunks(dc.x, dc.z, arr);
+        pipe.template_counter.reset();
+        pipe.decorator.decorate(&mut region, dc.x, dc.z);
+        features_us += t1.elapsed().as_micros();
+
+        let types = hook.with_starts(|_, store| types_at_chunk(store, dc.x, dc.z));
+        let tag = format!(
+            "{} seed {seed} ({},{}) [{}]",
+            dc.dimension,
+            dc.x,
+            dc.z,
+            types.iter().cloned().collect::<Vec<_>>().join(",")
+        );
+        let ok = compare_chunk(ctx, &mut t, dc, region.center_chunk(), &[], &tag);
+
+        let kind = labels
+            .get(&(dc.dimension.clone(), dc.x, dc.z))
+            .copied()
+            .unwrap_or("structure");
+        let mut groups: Vec<String> = types
+            .iter()
+            .map(|s| format!("{dim_short}:{s}", dim_short = short_dim(dim)))
+            .collect();
+        if kind == "fossil/template" || pipe.template_counter.placed() > 0 {
+            groups.push("fossil/template".to_owned());
+        }
+        if groups.is_empty() {
+            groups.push("no structure".to_owned());
+        }
+        groups.push("ALL chunks".to_owned());
+        for g in groups {
+            let e = t.groups.entry(g).or_default();
+            e.1 += 1;
+            e.0 += u64::from(ok);
+        }
+
+        let back = region.into_chunks();
+        for (i, rc) in back.into_iter().enumerate() {
+            let (dx, dz) = ((i % 3) as i32 - 1, (i / 3) as i32 - 1);
+            world_chunks.insert((dim, dc.x + dx, dc.z + dz), rc);
+        }
+    }
+
+    {
+        let mut g = timing.lock().expect("timing");
+        g.vanilla_ms += van_ms;
+        g.terrain_us += terrain_us;
+        g.features_us += features_us;
+        g.chunks += dumped.len();
+    }
+    Ok(t)
+}
+
+fn short_dim(dim: &str) -> &'static str {
+    match dim {
+        "minecraft:overworld" => "ow",
+        "minecraft:the_nether" => "nether",
+        _ => "end",
+    }
+}
+
+/// `cargo xtask parity golden-structures`: features-status chunks with structures on.
+pub fn golden_structures(version: &str, write: bool) -> anyhow::Result<bool> {
+    let ctx = load_context(version)?;
+    let timing = Mutex::new(Timing::default());
+    let golden: Vec<i64> = std::env::var("ZENITH_FEATURES_SEEDS")
+        .ok()
+        .map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+        .unwrap_or_else(|| GOLDEN_SEEDS.to_vec());
+    let results = Mutex::new(Vec::new());
+    std::thread::scope(|scope| {
+        for &seed in &golden {
+            let (ctx, timing, results) = (&ctx, &timing, &results);
+            // Jigsaw assembly and template placement are deeply recursive in debug builds.
+            std::thread::Builder::new()
+                .stack_size(256 << 20)
+                .spawn_scoped(scope, move || {
+                    let r = run_structures_world_job(ctx, version, seed, timing).inspect(|t| {
+                        println!("  world seed {seed}: {}/{}", t.passed, t.total);
+                    });
+                    results.lock().expect("results").push(r);
+                })
+                .expect("spawn world job");
+        }
+    });
+    let mut tally = Tally {
+        failure_cap: 400,
+        ..Tally::default()
+    };
+    for r in results.into_inner().expect("results") {
+        tally.merge(r?);
+    }
+    let tm = timing.into_inner().expect("timing");
+    println!(
+        "golden-structures timing: {} chunks — features {:.2} ms/chunk (3x3 terrain+beardifier {:.2} ms/chunk) | vanilla server runs {} ms total",
+        tm.chunks,
+        tm.features_us as f64 / 1000.0 / tm.chunks.max(1) as f64,
+        tm.terrain_us as f64 / 1000.0 / tm.chunks.max(1) as f64,
+        tm.vanilla_ms
+    );
+    println!(
+        "golden-structures {version}: {}/{} identical (blocks, biomes, 6 heightmaps, post-processing marks, tick counts; {} seeds, structures on; block entities and entities are not in the dump yet)",
+        tally.passed,
+        tally.total,
+        golden.len()
+    );
+    for (group, (p, n)) in &tally.groups {
+        println!("  group {group:<34} {p}/{n} chunks identical");
+    }
+    for f in &tally.failures {
+        println!("  FAIL {f}");
+    }
+    if write {
+        SuiteResult::new("golden-structures", version, tally.passed, tally.total)
             .write(&repo_root().join("progress/parity"))?;
     }
     Ok(tally.passed == tally.total)

@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-26T01:47:11Z",
+  "generatedAt": "2026-11-26T13:21:38Z",
   "project": "Zenith",
   "targetVersion": "26.3",
   "protocol": 777,
   "worldVersion": 5023,
   "overall": {
-    "percent": 21.6,
-    "parityPercent": 50.0,
+    "percent": 22.0,
+    "parityPercent": 52.4,
     "milestonesDone": 4,
     "milestonesTotal": 33,
     "suitesPassing": 19,
@@ -42,7 +42,7 @@
       "id": "P2",
       "title": "World simulation",
       "blurb": "RNG, noise, worldgen, lighting, ticking, entities, items, commands. Headless server.",
-      "percent": 28.2,
+      "percent": 29.1,
       "weight": 56.0,
       "milestones": [
         "M6",
@@ -551,7 +551,7 @@
       "title": "Features & structures",
       "status": "in-progress",
       "weight": 7.0,
-      "percent": 82.9,
+      "percent": 89.8,
       "tasksDone": 8,
       "tasksTotal": 10,
       "tasks": [
@@ -641,10 +641,10 @@
         },
         {
           "id": "golden-structures",
-          "passed": 0,
-          "total": 0,
-          "percent": 0.0,
-          "updatedAt": null
+          "passed": 16737,
+          "total": 17150,
+          "percent": 97.6,
+          "updatedAt": "2026-11-26"
         }
       ]
     },
@@ -1464,8 +1464,8 @@
     },
     {
       "date": "2026-11-26",
-      "percent": 21.6,
-      "parityPercent": 50.0
+      "percent": 22.0,
+      "parityPercent": 52.4
     }
   ]
 }

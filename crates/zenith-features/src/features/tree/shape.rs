@@ -126,6 +126,24 @@ pub(super) fn update_shape(
     }
 
     match class {
+        // FenceBlock: horizontal neighbours reconnect (a trunk placed next to a structure's fence).
+        "FenceBlock" => {
+            if ops.get_property(state, "waterlogged") == Some("true") {
+                region.schedule_fluid_tick(pos, FluidKind::Water, 5);
+            }
+            if matches!(
+                dir,
+                Direction::North | Direction::East | Direction::South | Direction::West
+            ) {
+                let connects = fence_connects(ops, state, nstate, dir.opposite());
+                return ops.try_set_property(
+                    state,
+                    dir.name(),
+                    if connects { "true" } else { "false" },
+                );
+            }
+            return state;
+        }
         // FallingBlock / BrushableBlock: every shape update schedules a tick.
         c if c.contains("FallingBlock")
             || c == "SandBlock"
@@ -204,6 +222,33 @@ pub(super) fn update_shape(
         region.schedule_fluid_tick(pos, FluidKind::Water, 5);
     }
     out
+}
+
+/// `FenceBlock.connectsTo(neighbour, neighbour.isFaceSturdy(..., towards), towards)`.
+fn fence_connects(ops: &BlockOps, fence: u32, neighbour: u32, towards: Direction) -> bool {
+    let sturdy = ops.is_face_sturdy(neighbour, towards);
+    let exception = is_leaves(ops, neighbour)
+        || matches!(
+            ops.block_path(neighbour),
+            "barrier" | "carved_pumpkin" | "jack_o_lantern" | "melon" | "pumpkin"
+        )
+        || ops.block_class(neighbour) == "ShulkerBoxBlock";
+    if !exception && sturdy {
+        return true;
+    }
+    let tag = |t: &str, s: u32| {
+        zenith_registry::Identifier::parse(t).is_ok_and(|id| ops.is_in_tag(s, &id))
+    };
+    if tag("minecraft:fences", neighbour)
+        && tag("minecraft:wooden_fences", neighbour) == tag("minecraft:wooden_fences", fence)
+    {
+        return true;
+    }
+    ops.block_class(neighbour) == "FenceGateBlock"
+        && ops
+            .get_property(neighbour, "facing")
+            .and_then(Direction::from_name)
+            .is_some_and(|f| f.axis() == towards.clockwise().axis())
 }
 
 /// `VineBlock.getUpdatedState`.

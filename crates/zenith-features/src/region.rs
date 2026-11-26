@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use zenith_biome::{section_biome_index, zoomed_quart_pos};
 use zenith_blocks::{FluidKind, ShapeKind, flag};
+use zenith_nbt::Compound;
 use zenith_registry::Identifier;
 use zenith_worldgen::{
     BiomeId, Heightmap, HeightmapKind, PostProcessingMark, SeededRandom, TerrainChunk,
@@ -16,7 +17,7 @@ use crate::block_ops::BlockOps;
 use crate::rng::BlockPos;
 
 /// Block-entity metadata placed during the `features` step (e.g. dungeon spawner, loot chest, end gateway).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FeatureBlockEntity {
     /// Placeholder created by `ProtoChunk.setBlockState` for any block with `hasBlockEntity`.
     Dummy,
@@ -32,6 +33,9 @@ pub enum FeatureBlockEntity {
         /// Spawned entity type ID (e.g. `minecraft:zombie`).
         entity_id: Identifier,
     },
+    /// Block entity data written by structure placement (template `nbt`, loot table and seed,
+    /// spawner data, sign text), as the keys merged into the block entity.
+    Data(Compound),
     /// End gateway (`EndGatewayFeature`).
     EndGateway {
         /// Exit teleport position, if configured.
@@ -80,6 +84,8 @@ pub struct RegionChunk {
     initial_fluid_ticks: i32,
     block_entities: HashMap<BlockPos, FeatureBlockEntity>,
     entities: Vec<FeatureEntity>,
+    /// Entities added by structure placement, as their NBT (`id`, `Pos`, `Rotation`, ...).
+    nbt_entities: Vec<Compound>,
 }
 
 impl RegionChunk {
@@ -134,6 +140,7 @@ impl RegionChunk {
             initial_fluid_ticks: chunk.fluid_tick_count(),
             block_entities: HashMap::new(),
             entities: Vec::new(),
+            nbt_entities: Vec::new(),
         }
     }
 
@@ -258,6 +265,12 @@ impl RegionChunk {
         &self.entities
     }
 
+    /// Entities added by structure placement (NBT compounds).
+    #[inline]
+    pub fn nbt_entities(&self) -> &[Compound] {
+        &self.nbt_entities
+    }
+
     #[inline]
     const fn section_index_of(&self, block_y: i32) -> Option<usize> {
         if block_y < self.min_y || block_y >= self.min_y + self.height {
@@ -369,7 +382,7 @@ pub struct GenerationRegion {
     gen_depth: i32,
     sea_level: i32,
     /// `WorldGenRegion.random` (initialized from `minecraft:worldgen_region_random` at `(centerX*16, 0, centerZ*16)`).
-    region_random: SeededRandom,
+    region_random: crate::structure_place::RegionRandom,
     ops: Arc<BlockOps>,
     /// Interned biome IDs per chunk palette for fast biome zoom lookups.
     biome_id_lookup: HashMap<Identifier, BiomeId>,
@@ -417,7 +430,7 @@ impl GenerationRegion {
             gen_min_y,
             gen_depth,
             sea_level,
-            region_random,
+            region_random: crate::structure_place::RegionRandom(region_random),
             ops,
             biome_id_lookup,
             chunk_biome_palettes,
@@ -519,8 +532,13 @@ impl GenerationRegion {
 
     /// Mutable access to `WorldGenRegion.getRandom()`.
     #[inline]
-    pub fn region_random_mut(&mut self) -> &mut SeededRandom {
+    pub fn region_random_dyn(&mut self) -> &mut dyn zenith_structures::WorldgenRandom {
         &mut self.region_random
+    }
+
+    /// `WorldGenRegion.getRandom()`.
+    pub fn region_random_mut(&mut self) -> &mut SeededRandom {
+        &mut self.region_random.0
     }
 
     /// Returns the center [`RegionChunk`].
@@ -539,6 +557,12 @@ impl GenerationRegion {
     pub fn into_center_chunk(self) -> RegionChunk {
         let [_, _, _, _, center, _, _, _, _] = *self.chunks;
         center
+    }
+
+    /// Consumes the region and returns all 9 chunks in `(dz + 1) * 3 + (dx + 1)` order, so a
+    /// caller can keep them (a neighbouring chunk's decoration sees what this one wrote).
+    pub fn into_chunks(self) -> [RegionChunk; 9] {
+        *self.chunks
     }
 
     /// Returns `true` if `y` is outside `[min_y, min_y + height)`.
@@ -765,6 +789,50 @@ impl GenerationRegion {
             true
         } else {
             false
+        }
+    }
+
+    /// Merges `nbt` into the block entity at `pos` (created from the placeholder; nothing happens
+    /// when the block hosts no block entity). Returns whether a block entity was updated.
+    pub fn merge_block_entity_data(&mut self, pos: BlockPos, nbt: Compound) -> bool {
+        let Some(slot) = self.chunk_slot(pos.chunk_x(), pos.chunk_z()) else {
+            return false;
+        };
+        let Some(existing) = self.chunks[slot].block_entities.get_mut(&pos) else {
+            return false;
+        };
+        match existing {
+            FeatureBlockEntity::Data(c) => {
+                for (k, v) in nbt.iter() {
+                    c.insert(k.clone(), v.clone());
+                }
+            }
+            other => *other = FeatureBlockEntity::Data(nbt),
+        }
+        true
+    }
+
+    /// `level.addFreshEntity(entity)` for an entity given as NBT (`Pos` list of doubles).
+    pub fn add_nbt_entity(&mut self, nbt: Compound) {
+        let pos: Vec<f64> = match nbt.get("Pos") {
+            Some(zenith_nbt::Tag::List(l)) => l
+                .as_slice()
+                .iter()
+                .map(|t| match t {
+                    zenith_nbt::Tag::Double(d) => *d,
+                    zenith_nbt::Tag::Float(f) => f64::from(*f),
+                    _ => 0.0,
+                })
+                .collect(),
+            _ => return,
+        };
+        if pos.len() < 3 {
+            return;
+        }
+        let cx = (pos[0].floor() as i32) >> 4;
+        let cz = (pos[2].floor() as i32) >> 4;
+        if let Some(slot) = self.chunk_slot(cx, cz) {
+            self.chunks[slot].nbt_entities.push(nbt);
         }
     }
 

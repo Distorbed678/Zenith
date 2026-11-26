@@ -16,7 +16,9 @@ zenith-biome = { path = "../zenith-biome" }
 zenith-blocks = { path = "../zenith-blocks" }
 zenith-codec = { path = "../zenith-codec" }
 zenith-math = { path = "../zenith-math" }
+zenith-nbt = { path = "../zenith-nbt" }
 zenith-registry = { path = "../zenith-registry" }
+zenith-structures = { path = "../zenith-structures" }
 zenith-worldgen = { path = "../zenith-worldgen" }
 
 [dev-dependencies]

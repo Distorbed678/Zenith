@@ -214,6 +214,8 @@ pub fn post_process(piece: &mut StructurePiece, call: &mut PieceCall<'_>) {
             let nw = ["north", "south", "west"];
             for (z0, y0, z1) in [(1, 1, 1), (4, 3, 4), (14, 3, 14), (17, 1, 17)] {
                 c.f(&ne, 0, y0, z0, 0, 4, z1);
+            }
+            for (z0, y0, z1) in [(1, 1, 1), (4, 3, 4), (14, 3, 14), (17, 1, 17)] {
                 c.f(&nw, 4, y0, z0, 4, 4, z1);
             }
         }

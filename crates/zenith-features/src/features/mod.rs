@@ -142,6 +142,7 @@ pub trait StructureInterleaveHook: fmt::Debug + Send + Sync {
     /// Places all structure pieces intersecting `(center_x, center_z)` for decoration `step_index`.
     fn place_structures_for_step(
         &self,
+        ctx: &FeatureContext<'_>,
         step_index: usize,
         decoration_seed: i64,
         region: &mut GenerationRegion,
@@ -156,6 +157,7 @@ pub struct NoopStructureHook;
 impl StructureInterleaveHook for NoopStructureHook {
     fn place_structures_for_step(
         &self,
+        _ctx: &FeatureContext<'_>,
         _step_index: usize,
         _decoration_seed: i64,
         _region: &mut GenerationRegion,
