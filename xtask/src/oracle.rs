@@ -75,9 +75,17 @@ pub fn build(version: &str) -> anyhow::Result<PathBuf> {
     let (_, java) = install_and_java(version)?;
     let dir = oracle_dir();
     let build = dir.join("build");
-    let classes = build.join("classes");
-    if classes.exists() {
-        fs::remove_dir_all(&classes)?;
+    // Build in a private folder and rename the finished jar into place: parallel builds cannot collide, and a vanilla
+    // server already running from the old jar keeps reading its (unlinked) file instead of a half-written one.
+    static BUILDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let work = build.join(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let classes = work.join("classes");
+    if work.exists() {
+        fs::remove_dir_all(&work)?;
     }
     fs::create_dir_all(classes.join("hooks"))?;
 
@@ -106,15 +114,16 @@ pub fn build(version: &str) -> anyhow::Result<PathBuf> {
                 .join(p.file_name().context("hook file name")?),
         )?;
     }
-    let manifest = build.join("MANIFEST.MF");
+    let manifest = work.join("MANIFEST.MF");
     fs::write(&manifest, "Premain-Class: dev.zenith.oracle.Agent\n")?;
     let jar = build.join("zenith-oracle.jar");
+    let tmp_jar = work.join("zenith-oracle.jar");
     let args: Vec<std::ffi::OsString> = vec![
         "-m".into(),
         "jdk.jartool/sun.tools.jar.Main".into(),
         "--create".into(),
         "--file".into(),
-        jar.clone().into(),
+        tmp_jar.clone().into(),
         "--manifest".into(),
         manifest.into(),
         "-C".into(),
@@ -125,6 +134,8 @@ pub fn build(version: &str) -> anyhow::Result<PathBuf> {
         &java,
         &args.iter().map(|a| a.as_os_str()).collect::<Vec<_>>(),
     )?;
+    fs::rename(&tmp_jar, &jar).context("install the agent jar")?;
+    let _ = fs::remove_dir_all(&work);
     println!(
         "oracle agent: {} (Java {} from {})",
         jar.display(),
