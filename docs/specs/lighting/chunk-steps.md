@@ -289,7 +289,14 @@ level (everything else).
 6. **[oracle] Client first-chunk order** (§9 step 3): confirm that the queued sky arrays are the ones that end up in the layers when
    section status registration happens after `setLightEnabled`, by dumping client layers right after the first run.
 7. **Open (outside this spec):** the value of `SKY_LIGHT_LEVEL` over time belongs to the environment-attribute / time spec.
-
+8. **(implementer) Deterministic flush model details.** Implemented as: `add_chunk` = the chunk finished `features` (visible to
+   the chunk-for-lighting accessor); `initialize_light` and `light` each submit their PRE and POST task and flush; the
+   unload task is followed by a flush and then the chunk object leaves the accessor; `initializeLight`'s `hasOnlyAir` test
+   is evaluated when the PRE task runs; any submission that brings the list to 1000 tasks runs one batch at once. The
+   per-section "only air" test counts every air kind (air, cave air, void air) as air.
+9. **(implementer) `ProtoChunk` early return.** For proto chunks the "plain air" comparison is made against the single state
+   of the air block; a write of cave / void air into an air-only section is **not** skipped (it is for level chunks, which
+   test `isAir`). Light notifications in proto mode require the persisted status to be at least `initialize_light`.
 ## Parity status
 
 Not yet run.

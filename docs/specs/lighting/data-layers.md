@@ -303,7 +303,17 @@ NBT keys per section tag: `Y` (byte), `BlockLight` (byte array 2048), `SkyLight`
 3. **[oracle] Sky layer creation order** (rule 9 step 2). Probe: call `updateSectionStatus` for a single column in
    ascending then descending order on a scratch engine and dump both layers' bytes; confirm the replicated-bottom-slice
    rule and its dependence on order.
-
+4. **(implementer) Adopted queued layers.** `createDataLayer` hands the queued object to the updating map and the queue
+   entry stays until the end-of-run pass (rule 7.5). Zenith keeps layers as copy-on-write shared handles, so the entry is
+   replaced by an "adopted" marker at adoption: `getDataLayerData` then answers with the updating layer (the same object in
+   the game), and rule 7.1 puts that layer back into the queue for retained columns. Equivalent as long as nothing reads
+   `getDataLayerData` between adoption and the swap in a way that differs; probe: client first-chunk order (chunk-steps Q6).
+5. **(implementer) Order of `sectionsAffectedByLightUpdates`.** Stored in insertion order of first occurrence (spec Edge 9
+   allows it); `initializeSection` marks its 27 sections with the offsets in X, Y, Z ascending order. Only the order of
+   change notifications could differ from the game.
+6. **(implementer) `DataLayer.getData` on shared layers.** Packets and saves read layers through a non-materialising
+   `to_bytes` (a lazy layer yields its fill bytes). The game's `getData` materialises the shared layer, which can only
+   change null-ness of a layer that is then *not empty* anyway (empty layers are never read); confirm with the packet probe.
 ## Parity status
 
 Not yet run.

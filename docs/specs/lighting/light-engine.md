@@ -292,7 +292,16 @@ Directions are always visited in the order DOWN, UP, NORTH, SOUTH, WEST, EAST, a
 4. **[oracle] Count semantics.** Confirm that the run count includes decreases enqueued by `propagateFromEmptySections`
    and that stale increase entries are counted (probe: compare `runLightUpdates()` return values against the number of
    `enqueue*` pairs dequeued).
-
+5. **(implementer) `lightDampeningInto` helper.** `mergedFaceOccludes` is implemented from `shapes.md` §4.4 as: BLOCK on
+   either side → true; `(first, second)` = `(S, O)` for a positive direction, `(O, S)` for a negative one; `first` is dropped
+   unless its max on the axis is within 1e-7 of 1, `second` unless its min is within 1e-7 of 0; both dropped → false;
+   otherwise the two boundary slices (`first.faceShape(positive)`, `second.faceShape(negative)`) are united and tested for
+   covering the unit square. No engine path uses it; probe it with the shape-pair sweep of Q3.
+6. **(implementer) One check set per engine.** Each engine (block, sky) owns its own `LongOpenHashSet(512, 0.5)`; both are
+   filled by `checkBlock` and iterated by their own run. The spec reads as per-engine state; confirm there is no shared set.
+7. **(implementer) Increase entries for sections without a layer.** The game would fail on `getStoredLevel` for such an
+   entry (impossible with consistent calls). Zenith counts the dequeued entry and drops it instead of aborting; `getState`
+   for a position with a missing chunk is read before the height check (bedrock wins over the out-of-height air rule).
 ## Parity status
 
 Not yet run.

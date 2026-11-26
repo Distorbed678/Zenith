@@ -1,0 +1,23 @@
+[package]
+name = "zenith-light"
+description = "Block-light and sky-light engines, light data layers and chunk light steps (implemented from docs/specs/lighting/)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["worldgen"]
+# `ChunkBlocks` for `zenith_worldgen::TerrainChunk`.
+worldgen = ["dep:zenith-worldgen"]
+
+[dependencies]
+zenith-blocks = { path = "../zenith-blocks" }
+zenith-registry = { path = "../zenith-registry" }
+zenith-worldgen = { path = "../zenith-worldgen", optional = true }
+thiserror.workspace = true
+
+[lints]
+workspace = true
